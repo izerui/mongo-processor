@@ -22,5 +22,4 @@ db_pass=***
 然后运行:
 ```python
 python main.py
-```# mongo-processor
-# mongo-processor
+```
