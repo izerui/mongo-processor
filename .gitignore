@@ -1,0 +1,6 @@
+dist/
+venv/
+build/
+dumps/
+config.ini
+*.log
