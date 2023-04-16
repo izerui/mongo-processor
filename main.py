@@ -1,4 +1,5 @@
 import os
+import shutil
 from configparser import ConfigParser
 
 from dump import MyDump, MyImport, Mongo
@@ -31,4 +32,4 @@ if __name__ == "__main__":
 
         # 删除导出的文件
         print(f'--------------------------------------------->> 删除临时sql文件缓存: {db_dir}')
-        os.remove(db_dir)
+        shutil.rmtree(db_dir)
