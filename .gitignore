@@ -2,5 +2,6 @@ dist/
 venv/
 build/
 dumps/
+.idea/
 config.ini
 *.log
