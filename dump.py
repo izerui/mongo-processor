@@ -76,6 +76,6 @@ class MyImport(Shell):
         :param db_dir: 数据库目录
         :return:
         """
-        import_shell = f'{mongorestore_exe} -h {self.mongo.db_host}:{self.mongo.db_port} --username={self.mongo.db_user} --password="{self.mongo.db_pass}" --drop -d {database} {db_dir}'
+        import_shell = f'{mongorestore_exe} -h {self.mongo.db_host}:{self.mongo.db_port} --username={self.mongo.db_user} --password="{self.mongo.db_pass}" --drop –indexesLast -d {database} {db_dir}'
         self._exe_command(import_shell)
         pass
