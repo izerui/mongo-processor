@@ -24,7 +24,10 @@ class Shell(object):
         process = Popen(command, stdout=PIPE, stderr=STDOUT, shell=True)
         with process.stdout:
             for line in iter(process.stdout.readline, b''):
-                print(line.decode().strip())
+                try:
+                    print(line.decode().strip())
+                except:
+                    print(str(line))
         exitcode = process.wait()
         if exitcode != 0:
             raise BaseException('命令执行失败')
