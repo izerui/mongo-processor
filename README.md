@@ -1,5 +1,6 @@
 # mongo 导出导入
 > 工具下载地址(注意要与mongodb版本对应): https://www.mongodb.com/try/download/database-tools
+> 版本对应: https://www.mongodb.com/docs/database-tools/mongodump/
 
 在根目录下创建 config.ini:
 类似:
