@@ -25,6 +25,6 @@ db_user=***
 db_pass=***
 ```
 然后运行:
-```python
+```Python
 python main.py
 ```
