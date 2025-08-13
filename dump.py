@@ -79,8 +79,9 @@ class MyImport(Shell):
         :param db_dir: 数据库目录
         :return:
         """
-        user_append = f'--username={self.mongo.db_user}' if self.mongo.db_user else ''
+        user_append = f'--username="{self.mongo.db_user}"' if self.mongo.db_user else ''
         password_append = f'--password="{self.mongo.db_pass}"' if self.mongo.db_pass else ''
-        import_shell = f'{mongorestore_exe} -host="{self.mongo.db_host}" --port={self.mongo.db_port} {user_append} {password_append} --drop –indexesLast -d {database} {db_dir}'
+        auth_database_append = f'--authenticationDatabase=admin' if self.mongo.db_user else ''
+        import_shell = f'{mongorestore_exe} --host="{self.mongo.db_host}:{self.mongo.db_port}" {user_append} {password_append} {auth_database_append} --drop --db="{database}" {db_dir}'
         self._exe_command(import_shell)
         pass

@@ -13,14 +13,14 @@ if __name__ == "__main__":
                    config.get('target', 'db_pass'))
     databases = config.get('global', 'databases').split(',')
     dump_folder = 'dumps'
-    if not os.path.exists(dump_folder):
-        os.makedirs(dump_folder)
-    for db in databases:
-        # 导出生产mongo库
-        print(f'---------------------------------------------> 从{source.db_host}导出: {db}')
-        mydump = MyDump(source)
-        mydump.export_db(db, dump_folder)
-        print(f'---------------------------------------------> 成功 从{source.db_host}导出: {db}')
+    # if not os.path.exists(dump_folder):
+    #     os.makedirs(dump_folder)
+    # for db in databases:
+    #     # 导出生产mongo库
+    #     print(f'---------------------------------------------> 从{source.db_host}导出: {db}')
+    #     mydump = MyDump(source)
+    #     mydump.export_db(db, dump_folder)
+    #     print(f'---------------------------------------------> 成功 从{source.db_host}导出: {db}')
 
     for db in databases:
         db_dir = os.path.join(dump_folder, db)
