@@ -60,7 +60,8 @@ class MyDump(Shell):
         :param dump_root_path: dump根目录,会自动创建对应数据库名的dump目录
         :return:
         """
-        export_shell = f'''{mongodump_exe} --host="{self.mongo.db_host}:{self.mongo.db_port}" --db={database} --out={dump_root_path} --numParallelCollections 4 --username={self.mongo.db_user} --password="{self.mongo.db_pass}"'''
+        auth_append = f'--username={self.mongo.db_user} --password="{self.mongo.db_pass}" --authenticationDatabase=admin' if self.mongo.db_user else ''
+        export_shell = f'''{mongodump_exe} --host="{self.mongo.db_host}:{self.mongo.db_port}" --db={database} --out={dump_root_path} --numParallelCollections 4 {auth_append}'''
         self._exe_command(export_shell)
 
 
