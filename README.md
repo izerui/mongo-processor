@@ -113,6 +113,25 @@ uv lock
 SKIP_PUSH=true ./build.sh  # 仅构建不推送
 ```
 
+### GitHub Actions 自动构建
+项目已配置 GitHub Actions，支持智能触发：
+
+#### 触发条件
+当以下文件变更时，推送到 `main` 分支自动构建：
+- `main.py`, `dump.py` - 核心代码
+- `Dockerfile` - 镜像配置
+- `pyproject.toml` - 依赖配置
+- `mongodb-database-tools/` - MongoDB工具
+
+#### 镜像地址
+`harbor.yunjizhizao.com/library/mongo-processor:latest`
+
+#### 配置步骤
+1. 在 GitHub 仓库设置中添加 Secrets：
+   - `HARBOR_USERNAME`: Harbor 用户名
+   - `HARBOR_PASSWORD`: Harbor 密码
+2. 修改相关文件并推送即可自动构建
+
 ### 导出 requirements.txt
 ```bash
 uv export --format requirements-txt > requirements.txt
