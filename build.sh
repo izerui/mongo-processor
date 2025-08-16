@@ -14,9 +14,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Harbor 配置
-HARBOR_REGISTRY="harbor.yunjizhizao.com"
-IMAGE_NAME="library/mongo-processor"
+# Docker Hub 配置
+DOCKER_REGISTRY="docker.io"
+IMAGE_NAME="your-username/mongo-processor"
 IMAGE_TAG="latest"
 SKIP_PUSH="${SKIP_PUSH:-false}"
 
@@ -93,7 +93,7 @@ echo ""
 echo "使用方法:"
 echo "  本地运行: uv run python main.py"
 echo "  Docker运行: docker run -v \$(pwd)/config.ini:/app/config.ini mongo-processor:latest"
-echo "  Harbor镜像: docker run -v \$(pwd)/config.ini:/app/config.ini ${HARBOR_REGISTRY}/library/mongo-processor:latest"
+echo "  Docker Hub镜像: docker run -v \$(pwd)/config.ini:/app/config.ini ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest"
 echo ""
 echo "配置说明:"
 echo "  1. 复制 config.ini.sample 为 config.ini"
@@ -102,4 +102,4 @@ echo "  3. MongoDB 数据库工具已包含在项目中"
 echo ""
 echo "推送选项:"
 echo "  仅构建不推送: SKIP_PUSH=true ./build.sh"
-echo "  登录 Harbor: docker login harbor.yunjizhizao.com"
+echo "  登录 Docker Hub: docker login docker.io"

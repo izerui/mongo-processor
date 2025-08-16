@@ -90,16 +90,15 @@ uv add --dev pytest
 uv add pymongo
 ```
 
-## 部署指南
-
+### 部署指南
 ### 构建并推送
 ```bash
-# 构建并推送到私有仓库
+# 构建并推送到 Docker Hub
 ./build.sh
 
-# 从私有仓库拉取运行
-docker pull harbor.yunjizhizao.com/library/mongo-processor:latest
-docker run -v $(pwd)/config.ini:/app/config.ini harbor.yunjizhizao.com/library/mongo-processor:latest
+# 从 Docker Hub 拉取运行
+docker pull your-username/mongo-processor:latest
+docker run -v $(pwd)/config.ini:/app/config.ini your-username/mongo-processor:latest
 ```
 
 ### 更新依赖
@@ -109,7 +108,7 @@ uv lock
 
 ### 推送选项
 ```bash
-./build.sh          # 构建并推送
+./build.sh          # 构建并推送到 Docker Hub
 SKIP_PUSH=true ./build.sh  # 仅构建不推送
 ```
 
@@ -124,14 +123,16 @@ SKIP_PUSH=true ./build.sh  # 仅构建不推送
 - `mongodb-database-tools/` - MongoDB工具
 
 #### 镜像地址
-`harbor.yunjizhizao.com/library/mongo-processor:latest`
+`docker.io/your-username/mongo-processor:latest`
 
 #### 配置步骤
 1. 在 GitHub 仓库设置中添加 Secrets：
-   - `HARBOR_USERNAME`: Harbor 用户名
-   - `HARBOR_PASSWORD`: Harbor 密码
+   - `DOCKER_USERNAME`: Docker Hub 用户名
+   - `DOCKER_PASSWORD`: Docker Hub 密码
 2. 修改相关文件并推送即可自动构建
 
+#### 手动触发
+在 GitHub Actions 页面手动运行工作流
 ### 导出 requirements.txt
 ```bash
 uv export --format requirements-txt > requirements.txt
