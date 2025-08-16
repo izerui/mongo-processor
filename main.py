@@ -17,19 +17,18 @@ if __name__ == "__main__":
         os.makedirs(dump_folder)
     for db in databases:
         # 导出生产mongo库
-        print(f'---------------------------------------------> 从{source.host}导出: {db}')
+        print(f' ℹ️从{source.host}导出: {db}')
         mydump = MyDump(source)
         mydump.export_db(db, dump_folder)
-        print(f'---------------------------------------------> 成功 从{source.host}导出: {db}')
-
-    for db in databases:
+        print(f' ✅成功 从{source.host}导出: {db}')
         db_dir = os.path.join(dump_folder, db)
         # 导入uat
-        print(f'---------------------------------------------> 导入{target.host}: {db}')
+        print(f' ℹ️导入{target.host}: {db}')
         myimport = MyImport(target)
         myimport.import_db(db, db_dir)
-        print(f'---------------------------------------------> 成功 导入{target.host}: {db}')
+        print(f' ✅成功 导入{target.host}: {db}')
 
         # 删除导出的文件
-        print(f'--------------------------------------------->> 删除临时sql文件缓存: {db_dir}')
+        print(f' ✅删除临时sql文件缓存: {db_dir}')
         shutil.rmtree(db_dir)
+
