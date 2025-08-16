@@ -36,13 +36,13 @@ class Shell(object):
 
 
 class Mongo:
-    __slots__ = ['db_host', 'db_port', 'db_user', 'db_pass']
+    __slots__ = ['host', 'port', 'username', 'password']
 
     def __init__(self, db_host, db_port, db_user, db_pass):
-        self.db_host = db_host
-        self.db_port = db_port
-        self.db_user = db_user
-        self.db_pass = db_pass
+        self.host = db_host
+        self.port = db_port
+        self.username = db_user
+        self.password = db_pass
 
 
 class MyDump(Shell):
@@ -61,8 +61,8 @@ class MyDump(Shell):
         :param dump_root_path: dump根目录,会自动创建对应数据库名的dump目录
         :return:
         """
-        auth_append = f'--username={self.mongo.db_user} --password="{self.mongo.db_pass}" --authenticationDatabase=admin' if self.mongo.db_user else ''
-        export_shell = f'''{mongodump_exe} --host="{self.mongo.db_host}:{self.mongo.db_port}" --db={database} --out={dump_root_path} --numParallelCollections 4 {auth_append}'''
+        auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin' if self.mongo.username else ''
+        export_shell = f'''{mongodump_exe} --host="{self.mongo.host}:{self.mongo.port}" --db={database} --out={dump_root_path} --numParallelCollections 4 {auth_append}'''
         self._exe_command(export_shell)
 
 
@@ -81,9 +81,9 @@ class MyImport(Shell):
         :param db_dir: 数据库目录
         :return:
         """
-        user_append = f'--username="{self.mongo.db_user}"' if self.mongo.db_user else ''
-        password_append = f'--password="{self.mongo.db_pass}"' if self.mongo.db_pass else ''
-        auth_database_append = f'--authenticationDatabase=admin' if self.mongo.db_user else ''
-        import_shell = f'{mongorestore_exe} --host="{self.mongo.db_host}:{self.mongo.db_port}" {user_append} {password_append} {auth_database_append} --drop --db="{database}" {db_dir}'
+        user_append = f'--username="{self.mongo.username}"' if self.mongo.username else ''
+        password_append = f'--password="{self.mongo.password}"' if self.mongo.password else ''
+        auth_database_append = f'--authenticationDatabase=admin' if self.mongo.username else ''
+        import_shell = f'{mongorestore_exe} --host="{self.mongo.host}:{self.mongo.port}" {user_append} {password_append} {auth_database_append} --drop --db="{database}" {db_dir}'
         self._exe_command(import_shell)
         pass
