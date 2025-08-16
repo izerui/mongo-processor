@@ -3,13 +3,14 @@ import platform
 from subprocess import Popen, PIPE, STDOUT
 
 if platform.system() == 'Windows':
-    mongodump_exe = os.path.join('mongo-client', '4.0', 'windows', 'mongodump.exe')
-    mongorestore_exe = os.path.join('mongo-client', '4.0', 'windows', 'mongorestore.exe')
+    mongodump_exe = os.path.join('mongodb-database-tools', 'windows-x86_64-100.13.0', 'mongodump.exe')
+    mongorestore_exe = os.path.join('mongodb-database-tools', 'windows-x86_64-100.13.0', 'mongorestore.exe')
 elif platform.system() == 'Linux':
-    raise BaseException('暂不支持')
+    mongodump_exe = os.path.join('mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongodump.exe')
+    mongorestore_exe = os.path.join('mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongorestore.exe')
 elif platform.system() == 'Darwin':
-    mongodump_exe = os.path.join('mongo-client', '4.0', 'osx', 'mongodump')
-    mongorestore_exe = os.path.join('mongo-client', '4.0', 'osx', 'mongorestore')
+    mongodump_exe = os.path.join('mongodb-database-tools', 'macos-arm64-100.13.0', 'mongodump')
+    mongorestore_exe = os.path.join('mongodb-database-tools', 'macos-arm64-100.13.0', 'mongorestore')
 
 
 class Shell(object):
