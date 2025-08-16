@@ -10,19 +10,19 @@ https://fastdl.mongodb.org/tools/db/mongodb-database-tools-macos-arm64-100.9.0.z
 类似:
 ```ini
 [global]
-databases=message,code,db2ss
+databases=code2,ddd,xxx
 
 [source]
-db_host=16.15.64.56
-db_port=27017
-db_user=***
-db_pass=***
+host=161.189.137.33
+port=27171
+username=business
+password=xxx
 
 [target]
-db_host=10.96.104.15
-db_port=27017
-db_user=***
-db_pass=***
+host=118.145.81.22
+port=3717
+username=root
+password=xxx
 ```
 然后运行:
 ```Python
