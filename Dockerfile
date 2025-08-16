@@ -32,7 +32,7 @@ COPY README.md .
 # 使用 uv 安装项目
 RUN uv sync --frozen
 
-# 创建 dumps 目录
+# 创建 dumps 目录（如果不存在）
 RUN mkdir -p /app/dumps
 
 # 运行命令
