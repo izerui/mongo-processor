@@ -8,4 +8,3 @@ config.ini
 
 # uv
 .venv
-uv.lock
