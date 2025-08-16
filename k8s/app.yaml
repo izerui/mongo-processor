@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo-processor
+  namespace: platform-yunji
+  labels:
+    app: mongo-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo-processor
+  template:
+    metadata:
+      labels:
+        app: mongo-processor
+    spec:
+      restartPolicy: Always
+      nodeSelector:
+        app-type: mongo-processor
+      tolerations:
+        - key: app-type
+          value: mongo-processor
+          operator: Equal
+          effect: NoSchedule
+      containers:
+        - name: mongo-processor
+          image: harbor.yunjizhizao.com/serv999/hub/izerui/mongo-processor:latest
+          imagePullPolicy: Always
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.ini
+              subPath: config.ini
+              readOnly: true
+            - name: mongo-storage
+              mountPath: /app/dumps
+              subPath: dumps
+          resources:
+            requests:
+              memory: "8Gi"
+              cpu: "2000m"
+      volumes:
+        - name: config
+          configMap:
+            name: mongo-processor-config
+        - name: mongo-storage
+          persistentVolumeClaim:
+            claimName: mongo-processor-pvc
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongo-processor-config
+  namespace: platform-yunji
+data:
+  config.ini: |
+    [global]
+    databases=code2
+    
+    [source]
+    host=161.189.137.222
+    port=8117
+    username=business
+    password=xxx
+    
+    [target]
+    host=118.145.81.333
+    port=33717
+    username=root
+    password=xxx
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-processor-pvc
+  namespace: platform-yunji
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: nfs
