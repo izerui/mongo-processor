@@ -15,7 +15,7 @@ on:
 
 env:
   DOCKER_REGISTRY: docker.io
-  IMAGE_NAME: your-username/mongo-processor
+  IMAGE_NAME: izerui/mongo-processor
   IMAGE_TAG: latest
 
 jobs:
