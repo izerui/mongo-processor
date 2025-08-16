@@ -1,0 +1,14 @@
+[global]
+databases=database1,database2,database3
+
+[source]
+host=source-mongodb-host
+port=27017
+username=source-username
+password=source-password
+
+[target]
+host=target-mongodb-host
+port=27017
+username=target-username
+password=target-password

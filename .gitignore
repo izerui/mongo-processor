@@ -5,3 +5,7 @@ dumps/
 .idea/
 config.ini
 *.log
+
+# uv
+.venv
+uv.lock

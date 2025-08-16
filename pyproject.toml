@@ -1,0 +1,18 @@
+[project]
+name = "mongo-processor"
+version = "0.1.0"
+description = "A MongoDB data migration tool for exporting and importing databases between different MongoDB instances"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+mongo-processor = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/izerui/mongo-processor"
+Repository = "https://github.com/izerui/mongo-processor"
+Issues = "https://github.com/izerui/mongo-processor/issues"
+
+[dependency-groups]
+dev = []

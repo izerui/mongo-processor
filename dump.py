@@ -6,8 +6,8 @@ if platform.system() == 'Windows':
     mongodump_exe = os.path.join('mongodb-database-tools', 'windows-x86_64-100.13.0', 'mongodump.exe')
     mongorestore_exe = os.path.join('mongodb-database-tools', 'windows-x86_64-100.13.0', 'mongorestore.exe')
 elif platform.system() == 'Linux':
-    mongodump_exe = os.path.join('mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongodump.exe')
-    mongorestore_exe = os.path.join('mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongorestore.exe')
+    mongodump_exe = os.path.join('mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongodump')
+    mongorestore_exe = os.path.join('mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongorestore')
 elif platform.system() == 'Darwin':
     mongodump_exe = os.path.join('mongodb-database-tools', 'macos-arm64-100.13.0', 'mongodump')
     mongorestore_exe = os.path.join('mongodb-database-tools', 'macos-arm64-100.13.0', 'mongorestore')
