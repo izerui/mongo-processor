@@ -33,6 +33,7 @@ if __name__ == "__main__":
     # 清理历史导出目录,如果配置不导出则不清理
     cleanup_dump_folder(dump_folder)
     dump_folder.mkdir(exist_ok=True)
+    print(f"⚙️  导出配置: 并发数={parallelNum}")
     total_start_time = time.time()
     for db in databases:
         # 导出生产mongo库

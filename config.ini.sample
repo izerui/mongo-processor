@@ -1,6 +1,7 @@
 [global]
 databases=database1,database2,database3
-parallel=8
+# 并发配置
+parallel = 8
 
 [source]
 host=source-mongodb-host

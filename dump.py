@@ -63,7 +63,7 @@ class MyDump(Shell):
         :return:
         """
         auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin' if self.mongo.username else ''
-        export_shell = f'''{mongodump_exe} --host="{self.mongo.host}:{self.mongo.port}" --db={database} --out={dump_root_path} --numParallelCollections {self.parallelNum} {auth_append}'''
+        export_shell = f'''{mongodump_exe} --host="{self.mongo.host}:{self.mongo.port}" --db={database} --out={dump_root_path} --numParallelCollections {self.parallelNum} --gzip {auth_append}'''
         self._exe_command(export_shell)
 
 
@@ -85,6 +85,6 @@ class MyImport(Shell):
         user_append = f'--username="{self.mongo.username}"' if self.mongo.username else ''
         password_append = f'--password="{self.mongo.password}"' if self.mongo.password else ''
         auth_database_append = f'--authenticationDatabase=admin' if self.mongo.username else ''
-        import_shell = f'{mongorestore_exe} --host="{self.mongo.host}:{self.mongo.port}" {user_append} {password_append} {auth_database_append} --drop --db="{database}" {db_dir}'
+        import_shell = f'{mongorestore_exe} --host="{self.mongo.host}:{self.mongo.port}" {user_append} {password_append} {auth_database_append} --drop --gzip --db="{database}" {db_dir}'
         self._exe_command(import_shell)
         pass
