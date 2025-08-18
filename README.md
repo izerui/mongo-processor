@@ -46,6 +46,7 @@ source .venv/bin/activate  # macOS/Linux
 ```ini
 [global]
 databases=code2,ddd,xxx
+parallel=8
 
 [source]
 host=161.189.137.33

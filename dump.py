@@ -50,9 +50,10 @@ class MyDump(Shell):
     导出数据库备份到目录
     """
 
-    def __init__(self, mongo: Mongo):
+    def __init__(self, mongo: Mongo, parallelNum: int = 4):
         super().__init__()
         self.mongo = mongo
+        self.parallelNum = parallelNum
 
     def export_db(self, database, dump_root_path):
         """
@@ -62,7 +63,7 @@ class MyDump(Shell):
         :return:
         """
         auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin' if self.mongo.username else ''
-        export_shell = f'''{mongodump_exe} --host="{self.mongo.host}:{self.mongo.port}" --db={database} --out={dump_root_path} --numParallelCollections 4 {auth_append}'''
+        export_shell = f'''{mongodump_exe} --host="{self.mongo.host}:{self.mongo.port}" --db={database} --out={dump_root_path} --numParallelCollections {self.parallelNum} {auth_append}'''
         self._exe_command(export_shell)
 
 

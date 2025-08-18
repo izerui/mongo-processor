@@ -12,13 +12,14 @@ if __name__ == "__main__":
     target = Mongo(config.get('target', 'host'), config.get('target', 'port'), config.get('target', 'username'),
                    config.get('target', 'password'))
     databases = config.get('global', 'databases').split(',')
+    parallelNum = config.getint('global', 'parallel')
     dump_folder = 'dumps'
     if not os.path.exists(dump_folder):
         os.makedirs(dump_folder)
     for db in databases:
         # 导出生产mongo库
         print(f' ℹ️从{source.host}导出: {db}')
-        mydump = MyDump(source)
+        mydump = MyDump(source, parallelNum)
         mydump.export_db(db, dump_folder)
         print(f' ✅成功 从{source.host}导出: {db}')
         db_dir = os.path.join(dump_folder, db)
