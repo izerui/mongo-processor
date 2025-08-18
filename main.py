@@ -1,5 +1,7 @@
 import os
 import shutil
+import sys
+import time
 from configparser import ConfigParser
 from pathlib import Path
 
@@ -47,3 +49,12 @@ if __name__ == "__main__":
         # 删除导出的文件
         print(f' ✅删除临时sql文件缓存: {db_dir}')
         shutil.rmtree(db_dir)
+        # 程序结束
+    print("💤 程序执行完成，进入休眠状态...")
+
+    try:
+        while True:
+            time.sleep(3600)  # 每小时检查一次
+    except KeyboardInterrupt:
+        print("收到退出信号，程序结束")
+        sys.exit(0)
