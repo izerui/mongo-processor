@@ -1,8 +1,20 @@
 import os
 import shutil
 from configparser import ConfigParser
+from pathlib import Path
 
 from dump import MyDump, MyImport, Mongo
+
+def cleanup_dump_folder(dump_folder: Path) -> None:
+    """清理历史导出目录"""
+    if dump_folder.exists():
+        import shutil
+        # 只删除目录内容，不删除目录本身（云盘挂载路径）
+        for item in dump_folder.iterdir():
+            if item.is_file():
+                item.unlink()
+            elif item.is_dir():
+                shutil.rmtree(item)
 
 if __name__ == "__main__":
     config = ConfigParser()
@@ -14,8 +26,16 @@ if __name__ == "__main__":
     databases = config.get('global', 'databases').split(',')
     parallelNum = config.getint('global', 'parallel')
     dump_folder = 'dumps'
+    # 设置导出目录
+    dump_folder = Path(__file__).parent / 'dumps'
+    # 清理历史导出目录,如果配置不导出则不清理
+    cleanup_dump_folder(dump_folder)
+    dump_folder.mkdir(exist_ok=True)
+
     if not os.path.exists(dump_folder):
         os.makedirs(dump_folder)
+    else:
+        shutil.rmtree(dump_folder)
     for db in databases:
         # 导出生产mongo库
         print(f' ℹ️从{source.host}导出: {db}')
