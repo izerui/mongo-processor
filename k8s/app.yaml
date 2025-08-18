@@ -59,17 +59,18 @@ metadata:
 data:
   config.ini: |
     [global]
-    databases=code2
+    databases=bom_migration_tmp
+    parallel=8
     
     [source]
-    host=161.189.137.222
+    host=xxx
     port=8117
     username=business
     password=xxx
     
     [target]
-    host=118.145.81.333
-    port=33717
+    host=xxx
+    port=3717
     username=root
     password=xxx
 
