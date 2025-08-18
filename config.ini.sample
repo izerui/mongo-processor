@@ -1,7 +1,9 @@
 [global]
 databases=database1,database2,database3
-# 并发配置
+# 单库导出并发配置（每个数据库内部的并发数）
 parallel = 8
+# 线程池并发配置（同时处理的数据库数量）
+max_threads = 4
 
 [source]
 host=source-mongodb-host
