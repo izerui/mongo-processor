@@ -31,11 +31,6 @@ if __name__ == "__main__":
     # 清理历史导出目录,如果配置不导出则不清理
     cleanup_dump_folder(dump_folder)
     dump_folder.mkdir(exist_ok=True)
-
-    if not os.path.exists(dump_folder):
-        os.makedirs(dump_folder)
-    else:
-        shutil.rmtree(dump_folder)
     for db in databases:
         # 导出生产mongo库
         print(f' ℹ️从{source.host}导出: {db}')
@@ -52,4 +47,3 @@ if __name__ == "__main__":
         # 删除导出的文件
         print(f' ✅删除临时sql文件缓存: {db_dir}')
         shutil.rmtree(db_dir)
-
