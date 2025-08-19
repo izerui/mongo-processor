@@ -46,10 +46,12 @@ source .venv/bin/activate  # macOS/Linux
 ```ini
 [global]
 databases=code2,ddd,xxx
-# 单库导出并发配置（每个数据库内部的并发数）
-parallel = 8
 # 线程池并发配置（同时处理的数据库数量）
-max_threads = 4
+maxThreads = 4
+# 单库导出导入并发配置（每个数据库内部的并发数）
+numParallelCollections = 16
+# 每个集合的插入工作线程数
+numInsertionWorkersPerCollection = 8
 
 [source]
 host=161.189.137.33
