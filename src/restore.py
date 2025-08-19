@@ -50,7 +50,6 @@ class MyRestore(Shell):
                 f'--numInsertionWorkersPerCollection={self.num_insertion_workers} '
                 f'--noIndexRestore '
                 f'--drop '
-                f'--gzip '
                 f'--dir="{dump_root_path}"'
             )
 
