@@ -188,6 +188,7 @@ def main():
     # 为成功的数据库创建索引
     if successful_dbs:
         print("\n🔍 开始创建索引...")
+        print("=" * 50)
 
         try:
             # 创建MongoDB客户端
@@ -218,17 +219,20 @@ def main():
             )
 
             # 打印索引创建统计
-            print(f"\n📊 索引创建统计:")
-            print(f"   总数据库数: {index_results['total_databases']}")
-            print(f"   成功数据库数: {index_results['successful_databases']}")
-            print(f"   总索引数: {index_results['total_indexes']}")
-            print(f"   成功创建索引数: {index_results['created_indexes']}")
-            print(f"   索引创建耗时: {index_results['duration']:.2f}秒")
+            print("\n" + "=" * 50)
+            print(f"📊 索引创建汇总统计:")
+            print(f"   📂 处理数据库数: {index_results['total_databases']}")
+            print(f"   ✅ 成功数据库数: {index_results['successful_databases']}")
+            print(f"   📈 总索引数: {index_results['total_indexes']}")
+            print(f"   🎯 成功创建索引数: {index_results['created_indexes']}")
+            print(f"   ⏱️  总耗时: {index_results['duration']:.2f}秒")
 
             if index_results['failed_databases']:
-                print(f"   ❌ 失败数据库:")
+                print(f"\n   ❌ 失败数据库:")
                 for failed_db in index_results['failed_databases']:
-                    print(f"      - {failed_db['database']}: {failed_db.get('error', '未知错误')}")
+                    print(f"      📛 {failed_db['database']}: {failed_db.get('error', '未知错误')}")
+            else:
+                print(f"\n   🎉 所有数据库索引创建成功!")
 
             # 关闭客户端连接
             source_client.close()

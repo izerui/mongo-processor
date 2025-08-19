@@ -94,6 +94,7 @@ class IndexManager:
             字典，键为集合名，值为是否成功
         """
         results = {}
+        print(f"\n📂 数据库 {database_name} 开始创建索引...")
 
         for collection_name, indexes in indexes_info.items():
             try:
@@ -101,8 +102,11 @@ class IndexManager:
                 target_collection = target_db[collection_name]
 
                 if not indexes:
+                    print(f"   📄 集合 {collection_name}: 无索引需要创建")
                     results[collection_name] = True
                     continue
+
+                print(f"   📄 集合 {collection_name}: 准备创建 {len(indexes)} 个索引")
 
                 # 准备索引模型
                 index_models = []
@@ -133,19 +137,32 @@ class IndexManager:
 
                 # 批量创建索引
                 if index_models:
+                    created_names = [idx['name'] for idx in indexes]
                     target_collection.create_indexes(index_models)
+
+                    # 打印创建的索引详情
+                    for idx in indexes:
+                        index_desc = f"{idx['name']}: {list(idx['key'].items())}"
+                        if idx.get('unique'):
+                            index_desc += " [唯一]"
+                        if idx.get('sparse'):
+                            index_desc += " [稀疏]"
+                        print(f"      ✅ 创建索引 {index_desc}")
 
                 results[collection_name] = True
                 logger.info(f"成功在集合 {collection_name} 上创建 {len(indexes)} 个索引")
 
             except DuplicateKeyError as e:
                 logger.warning(f"集合 {collection_name} 索引创建时存在重复键: {e}")
+                print(f"      ⚠️  集合 {collection_name} 索引已存在，跳过创建")
                 results[collection_name] = True  # 视为成功，因为索引已存在
             except OperationFailure as e:
                 logger.error(f"集合 {collection_name} 索引创建失败: {e}")
+                print(f"      ❌ 集合 {collection_name} 索引创建失败: {e}")
                 results[collection_name] = False
             except Exception as e:
                 logger.error(f"集合 {collection_name} 索引创建时发生未知错误: {e}")
+                print(f"      ❌ 集合 {collection_name} 发生未知错误: {e}")
                 results[collection_name] = False
 
         return results
@@ -207,6 +224,7 @@ class IndexManager:
 
         except Exception as e:
             logger.error(f"重新创建数据库 {database_name} 的索引时发生错误: {e}")
+            print(f"❌ 数据库 {database_name} 索引创建失败: {e}")
             return {
                 'database': database_name,
                 'success': False,
@@ -257,13 +275,13 @@ class IndexManager:
                     results.append(result)
 
                     if result['success']:
-                        logger.info(f"✅ 数据库 {db_name} 索引创建完成 "
-                                  f"(总索引: {result['total_indexes']}, "
-                                  f"成功: {result['created_indexes']}, "
-                                  f"耗时: {result['duration']:.2f}秒)")
+                        print(f"✅ 数据库 {db_name} 索引创建完成 "
+                              f"(总索引: {result['total_indexes']}, "
+                              f"成功: {result['created_indexes']}, "
+                              f"耗时: {result['duration']:.2f}秒)")
                     else:
-                        logger.warning(f"⚠️  数据库 {db_name} 索引创建失败 "
-                                     f"(失败集合: {result.get('failed_collections', [])})")
+                        print(f"⚠️  数据库 {db_name} 索引创建失败 "
+                              f"(失败集合: {result.get('failed_collections', [])})")
 
                 except Exception as e:
                     logger.error(f"处理数据库 {db_name} 时发生异常: {e}")
