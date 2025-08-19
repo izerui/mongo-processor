@@ -6,8 +6,7 @@ maxThreads = 4
 numParallelCollections = 8
 # 每个集合的插入工作线程数
 numInsertionWorkersPerCollection = 8
-# 大集合阈值（文档数量），超过此值使用分区并发导出
-largeCollectionThreshold = 1000000
+
 
 [source]
 host=source-mongodb-host

@@ -52,8 +52,30 @@ maxThreads = 4
 numParallelCollections = 8
 # 每个集合的插入工作线程数
 numInsertionWorkersPerCollection = 8
-# 大集合阈值（文档数量），超过此值使用分区并发导出
-largeCollectionThreshold = 1000000
+
+
+## 目录结构
+
+导出后的目录结构如下（mongodump默认行为）：
+
+```
+dumps/
+├── 数据库名1/
+│   ├── collection1.bson.gz
+│   ├── collection1.metadata.json.gz
+│   ├── collection2.bson.gz
+│   └── collection2.metadata.json.gz
+├── 数据库名2/
+│   ├── collection3.bson.gz
+│   ├── collection3.metadata.json.gz
+│   └── ...
+```
+
+**重要说明：**
+- mongodump会在`--out`指定的目录下自动创建数据库名子目录
+- 因此最终路径为：`dumps/数据库名/文件`
+- 每个数据库作为一个整体导出，所有集合的文件直接放在数据库目录下
+
 
 [source]
 host=161.189.137.33
