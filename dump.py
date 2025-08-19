@@ -63,12 +63,14 @@ class MyDump(Shell):
         :return:
         """
         auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin' if self.mongo.username else ''
-        export_shell = f'''{mongodump_exe} 
-        --host="{self.mongo.host}:{self.mongo.port}" 
-        --db={database} 
-        --out={dump_root_path} 
-        --numParallelCollections={self.numParallelCollections} 
-        --gzip {auth_append}'''
+        export_shell = (
+            f'{mongodump_exe} '
+            f'--host="{self.mongo.host}:{self.mongo.port}" '
+            f'--db={database} '
+            f'--out={dump_root_path} '
+            f'--numParallelCollections={self.numParallelCollections} '
+            f'--gzip {auth_append} '
+        )
         self._exe_command(export_shell)
 
 
@@ -82,6 +84,7 @@ class MyImport(Shell):
         self.mongo = mongo
         self.numParallelCollections = numParallelCollections
         self.numInsertionWorkersPerCollection = numInsertionWorkersPerCollection
+
     def import_db(self, database, db_dir):
         """
         读取mongo导出的数据库目录文件并导入到mongo中
@@ -91,13 +94,15 @@ class MyImport(Shell):
         user_append = f'--username="{self.mongo.username}"' if self.mongo.username else ''
         password_append = f'--password="{self.mongo.password}"' if self.mongo.password else ''
         auth_database_append = f'--authenticationDatabase=admin' if self.mongo.username else ''
-        import_shell = f'''{mongorestore_exe} 
-        --host="{self.mongo.host}:{self.mongo.port}" {user_append} {password_append} {auth_database_append} 
-        --numParallelCollections={self.numParallelCollections} 
-        --numInsertionWorkersPerCollection={self.numInsertionWorkersPerCollection} 
-        --noIndexRestore 
-        --drop 
-        --gzip 
-        --db="{database}" {db_dir}'''
+        import_shell = (
+            f'{mongorestore_exe} '
+            f'--host="{self.mongo.host}:{self.mongo.port}" {user_append} {password_append} {auth_database_append} '
+            f'--numParallelCollections={self.numParallelCollections} '
+            f'--numInsertionWorkersPerCollection={self.numInsertionWorkersPerCollection} '
+            f'--noIndexRestore '
+            f'--drop '
+            f'--gzip '
+            f'--db="{database}" {db_dir} '
+        )
         self._exe_command(import_shell)
         pass
