@@ -48,10 +48,12 @@ source .venv/bin/activate  # macOS/Linux
 databases=code2,ddd,xxx
 # 线程池并发配置（同时处理的数据库数量）
 maxThreads = 4
-# 单库导出导入并发配置（每个数据库内部的并发数）
-numParallelCollections = 16
+# 单库导出导入并行处理collection的并发数
+numParallelCollections = 8
 # 每个集合的插入工作线程数
 numInsertionWorkersPerCollection = 8
+# 大集合阈值（文档数量），超过此值使用分区并发导出
+largeCollectionThreshold = 1000000
 
 [source]
 host=161.189.137.33

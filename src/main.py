@@ -11,7 +11,8 @@ from configparser import ConfigParser
 from pathlib import Path
 
 from typing import List, Tuple
-from dump import MyDump, MyImport, Mongo
+from dump import MyDump, Mongo
+from restore import MyRestore
 
 
 def cleanup_dump_folder(dump_folder: Path) -> None:
@@ -23,48 +24,6 @@ def cleanup_dump_folder(dump_folder: Path) -> None:
                 item.unlink()
             elif item.is_dir():
                 shutil.rmtree(item)
-
-
-def get_large_collections_info(source: Mongo, database: str,
-                             threshold_docs: int = 1000000) -> List[Tuple[str, int]]:
-    """
-    获取数据库中的大集合信息
-
-    :param source: MongoDB连接信息
-    :param database: 数据库名
-    :param threshold_docs: 大集合阈值
-    :return: [(集合名, 文档数量), ...]
-    """
-    try:
-        # 构建MongoDB连接字符串
-        if source.username and source.password:
-            connection_string = f"mongodb://{source.username}:{source.password}@{source.host}:{source.port}/{database}?authSource=admin&directConnection=true"
-        else:
-            connection_string = f"mongodb://{source.host}:{source.port}/{database}"
-
-        client = MongoClient(connection_string)
-        db = client[database]
-
-        # 获取所有集合
-        collections = db.list_collection_names()
-
-        large_collections = []
-        for collection_name in collections:
-            try:
-                collection = db[collection_name]
-                doc_count = collection.count_documents({})
-                print(f"   📊 集合 {collection_name}: {doc_count:,} 条文档")
-                if doc_count >= threshold_docs:
-                    large_collections.append((collection_name, doc_count))
-            except Exception as e:
-                print(f"⚠️  获取集合 {collection_name} 文档数量失败: {str(e)}")
-                continue
-
-        client.close()
-        return large_collections
-    except Exception as e:
-        print(f"⚠️  获取大集合信息失败: {str(e)}")
-        return []
 
 
 def process_single_database(db_name: str, source: Mongo, target: Mongo,
@@ -83,108 +42,25 @@ def process_single_database(db_name: str, source: Mongo, target: Mongo,
     """
     start_time = time.time()
     try:
-        # 获取大集合信息
-        large_collections = get_large_collections_info(source, db_name, large_collection_threshold)
-
+        # 导出
         export_start_time = time.time()
-
-        if large_collections:
-            print(f' ℹ️ 从{source.host}导出: {db_name} (检测到 {len(large_collections)} 个大集合)')
-
-            # 处理大集合的分区导出
-            mydump = MyDump(source, numParallelCollections)
-            all_partition_dirs = []
-
-            for collection_name, doc_count in large_collections:
-                print(f'   📊 大集合 {collection_name}: {doc_count:,} 条文档，使用分区导出')
-
-                # 计算分区数量：每50万条一个分区，最多16个
-                partitions = min(16, max(2, doc_count // 500000))
-
-                # 分区导出大集合
-                partition_dirs = mydump.export_collection_partitioned_concurrent(
-                    database=db_name,
-                    collection=collection_name,
-                    dump_root_path=str(dump_folder),
-                    partition_field="_id",
-                    partitions=partitions,
-                )
-                all_partition_dirs.extend(partition_dirs)
-
-            # 普通导出剩余的小集合
-            print(f'   📊 导出剩余小集合...')
-            auth_append = f'--username={source.username} --password="{source.password}" --authenticationDatabase=admin' if source.username else ''
-
-            # 根据平台选择正确的mongodump路径
-            if platform.system() == 'Windows':
-                mongodump_exe = os.path.join('mongodb-database-tools', 'windows-x86_64-100.13.0', 'mongodump.exe')
-            elif platform.system() == 'Linux':
-                mongodump_exe = os.path.join('mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongodump')
-            elif platform.system() == 'Darwin':
-                mongodump_exe = os.path.join('mongodb-database-tools', 'macos-arm64-100.13.0', 'mongodump')
-
-            export_cmd = (
-                f'{mongodump_exe} '
-                f'--host="{source.host}:{source.port}" '
-                f'--db={db_name} '
-                f'--out={dump_folder} '
-                f'--numParallelCollections={numParallelCollections} '
-                f'--gzip {auth_append} '
-            )
-
-            # 排除已处理的大集合
-            exclude_collections = ' '.join([f'--excludeCollection={collection_name}' for collection_name, _ in large_collections])
-            export_cmd += exclude_collections
-
-            mydump._exe_command(export_cmd)
-
-        else:
-            # 没有大集合，使用标准导出
-            print(f' ℹ️ 从{source.host}导出: {db_name} (无大集合，使用标准导出)')
-            mydump = MyDump(source, numParallelCollections)
-            mydump.export_db(db_name, dump_folder)
-
+        mydump = MyDump(source, numParallelCollections)
+        dump_dirs = mydump.export_db(database=db_name, dump_root_path=str(dump_folder), threshold_docs=large_collection_threshold)
         export_time = time.time() - export_start_time
         print(f' ✅ 成功从{source.host}导出: {db_name} (耗时: {export_time:.2f}秒)')
 
-        db_dir = os.path.join(dump_folder, db_name)
-
-        # 导入uat
-        print(f' ℹ️ 导入{target.host}: {db_name}')
+        # 导入
         import_start_time = time.time()
-
-        if large_collections:
-            # 处理分区导出的导入
-            myimport = MyImport(target, numParallelCollections, numInsertionWorkersPerCollection)
-
-            # 导入普通集合
-            if os.path.exists(db_dir):
-                myimport.import_db(db_name, db_dir)
-
-            # 并发导入大集合的分区
-            for collection_name, _ in large_collections:
-                partition_dirs = []
-                for i in range(8):  # 最多检查8个分区
-                    partition_dir = os.path.join(dump_folder, f"{db_name}_{collection_name}_part{i}")
-                    if os.path.exists(partition_dir):
-                        partition_dirs.append(partition_dir)
-
-                if partition_dirs:
-                    print(f'   🔄 并发导入大集合 {collection_name} 的 {len(partition_dirs)} 个分区...')
-                    myimport.import_partitioned_collection(db_name, partition_dirs)
-
-        else:
-            # 标准导入
-            myimport = MyImport(target, numParallelCollections, numInsertionWorkersPerCollection)
-            myimport.import_db(db_name, db_dir)
-
+        myrestore = MyRestore(target, numParallelCollections, numInsertionWorkersPerCollection)
+        myrestore.restore_db(database=db_name, dump_dirs=dump_dirs)
         import_time = time.time() - import_start_time
         print(f' ✅ 成功导入{target.host}: {db_name} (耗时: {import_time:.2f}秒)')
 
-        # 删除导出的文件
-        print(f' ✅ 删除临时文件缓存: {db_dir}')
-        if os.path.exists(db_dir):
-            shutil.rmtree(db_dir)
+        # 删除当前数据库的导出目录
+        db_export_dir = os.path.join(str(dump_folder), db_name)
+        print(f' ✅ 删除临时文件缓存: {db_export_dir}')
+        if os.path.exists(db_export_dir):
+            shutil.rmtree(db_export_dir)
 
         total_time = time.time() - start_time
         return db_name, True, total_time
@@ -198,7 +74,8 @@ def process_single_database(db_name: str, source: Mongo, target: Mongo,
 def main():
     """主函数 - 使用线程池并发处理"""
     config = ConfigParser()
-    config.read('config.ini')
+    config_path = Path(__file__).parent.parent / 'config.ini'
+    config.read(config_path)
 
     source = Mongo(
         config.get('source', 'host'),
@@ -220,7 +97,7 @@ def main():
     numInsertionWorkersPerCollection = config.getint('global', 'numInsertionWorkersPerCollection')
     large_collection_threshold = config.getint('global', 'largeCollectionThreshold', fallback=1000000)  # 大集合阈值
 
-    dump_folder = Path(__file__).parent / 'dumps'
+    dump_folder = Path(__file__).parent.parent / 'dumps'
 
     # 清理历史导出目录
     cleanup_dump_folder(dump_folder)
