@@ -50,10 +50,10 @@ class MyDump(Shell):
     导出数据库备份到目录
     """
 
-    def __init__(self, mongo: Mongo, parallelNum: int = 4):
+    def __init__(self, mongo: Mongo, numParallelCollections: int = 4):
         super().__init__()
         self.mongo = mongo
-        self.parallelNum = parallelNum
+        self.numParallelCollections = numParallelCollections
 
     def export_db(self, database, dump_root_path):
         """
@@ -63,7 +63,7 @@ class MyDump(Shell):
         :return:
         """
         auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin' if self.mongo.username else ''
-        export_shell = f'''{mongodump_exe} --host="{self.mongo.host}:{self.mongo.port}" --db={database} --out={dump_root_path} --numParallelCollections {self.parallelNum} --gzip {auth_append}'''
+        export_shell = f'''{mongodump_exe} --host="{self.mongo.host}:{self.mongo.port}" --db={database} --out={dump_root_path} --numParallelCollections {self.numParallelCollections} --gzip {auth_append}'''
         self._exe_command(export_shell)
 
 
@@ -72,10 +72,11 @@ class MyImport(Shell):
     从sql文件导入
     """
 
-    def __init__(self, mongo: Mongo):
+    def __init__(self, mongo: Mongo, numParallelCollections: int = 4, numInsertionWorkersPerCollection: int = 4):
         super().__init__()
         self.mongo = mongo
-
+        self.numParallelCollections = numParallelCollections
+        self.numInsertionWorkersPerCollection = numInsertionWorkersPerCollection
     def import_db(self, database, db_dir):
         """
         读取mongo导出的数据库目录文件并导入到mongo中
@@ -85,6 +86,6 @@ class MyImport(Shell):
         user_append = f'--username="{self.mongo.username}"' if self.mongo.username else ''
         password_append = f'--password="{self.mongo.password}"' if self.mongo.password else ''
         auth_database_append = f'--authenticationDatabase=admin' if self.mongo.username else ''
-        import_shell = f'{mongorestore_exe} --host="{self.mongo.host}:{self.mongo.port}" {user_append} {password_append} {auth_database_append} --drop --gzip --db="{database}" {db_dir}'
+        import_shell = f'{mongorestore_exe} --host="{self.mongo.host}:{self.mongo.port}" {user_append} {password_append} {auth_database_append} --numParallelCollections={self.numParallelCollections} --numInsertionWorkersPerCollection={self.numInsertionWorkersPerCollection} --drop --gzip --db="{database}" {db_dir}'
         self._exe_command(import_shell)
         pass

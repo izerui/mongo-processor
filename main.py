@@ -5,8 +5,8 @@ import time
 import concurrent.futures
 from configparser import ConfigParser
 from pathlib import Path
-from typing import List, Tuple
 
+from typing import List, Tuple
 from dump import MyDump, MyImport, Mongo
 
 
@@ -22,13 +22,14 @@ def cleanup_dump_folder(dump_folder: Path) -> None:
 
 
 def process_single_database(db_name: str, source: Mongo, target: Mongo,
-                          parallel_num: int, dump_folder: Path) -> Tuple[str, bool, float]:
+                            numParallelCollections: int, numInsertionWorkersPerCollection: int, dump_folder: Path) -> Tuple[str, bool, float]:
     """
     处理单个数据库的导出、导入和清理
     :param db_name: 数据库名称
     :param source: 源MongoDB连接信息
     :param target: 目标MongoDB连接信息
-    :param parallel_num: 并发数
+    :param numParallelCollections: 并发数
+    :param numInsertionWorkersPerCollection: 每个集合的插入工作线程数
     :param dump_folder: 导出目录
     :return: (数据库名, 是否成功, 总耗时)
     """
@@ -37,7 +38,7 @@ def process_single_database(db_name: str, source: Mongo, target: Mongo,
         # 导出生产mongo库
         print(f' ℹ️ 从{source.host}导出: {db_name}')
         export_start_time = time.time()
-        mydump = MyDump(source, parallel_num)
+        mydump = MyDump(source, numParallelCollections)
         mydump.export_db(db_name, dump_folder)
         export_time = time.time() - export_start_time
         print(f' ✅ 成功从{source.host}导出: {db_name} (耗时: {export_time:.2f}秒)')
@@ -47,7 +48,7 @@ def process_single_database(db_name: str, source: Mongo, target: Mongo,
         # 导入uat
         print(f' ℹ️ 导入{target.host}: {db_name}')
         import_start_time = time.time()
-        myimport = MyImport(target)
+        myimport = MyImport(target, numParallelCollections, numInsertionWorkersPerCollection)
         myimport.import_db(db_name, db_dir)
         import_time = time.time() - import_start_time
         print(f' ✅ 成功导入{target.host}: {db_name} (耗时: {import_time:.2f}秒)')
@@ -85,8 +86,9 @@ def main():
     )
 
     databases = config.get('global', 'databases').split(',')
-    parallel_num = config.getint('global', 'parallel')
-    max_threads = config.getint('global', 'max_threads', fallback=4)  # 新增配置项
+    maxThreads = config.getint('global', 'maxThreads', fallback=4)  # 新增配置项
+    numParallelCollections = config.getint('global', 'numParallelCollections')
+    numInsertionWorkersPerCollection = config.getint('global', 'numInsertionWorkersPerCollection')
 
     dump_folder = Path(__file__).parent / 'dumps'
 
@@ -94,7 +96,7 @@ def main():
     cleanup_dump_folder(dump_folder)
     dump_folder.mkdir(exist_ok=True)
 
-    print(f"⚙️ 导出配置: 单库并发数={parallel_num}, 线程池并发数={max_threads}")
+    print(f"⚙️ 导出配置: 单库并发数={numParallelCollections}, 线程池并发数={maxThreads}")
     print(f"📊 待处理数据库: {len(databases)}个")
 
     total_start_time = time.time()
@@ -103,11 +105,11 @@ def main():
     successful_dbs = []
     failed_dbs = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=maxThreads) as pool:
         # 提交所有数据库处理任务
         future_to_db = {
             pool.submit(process_single_database, db.strip(), source, target,
-                       parallel_num, dump_folder): db.strip()
+                        numParallelCollections, numInsertionWorkersPerCollection, dump_folder): db.strip()
             for db in databases
         }
 
