@@ -10,6 +10,7 @@ from typing import Tuple
 
 from dump import MyDump, Mongo
 from restore import MyRestore
+from index import IndexManager, create_mongo_client
 
 
 def cleanup_dump_folder(dump_folder: Path) -> None:
@@ -184,6 +185,58 @@ def main():
             print(f"      - {db_name}")
 
     # 程序结束
+    # 为成功的数据库创建索引
+    if successful_dbs:
+        print("\n🔍 开始创建索引...")
+
+        try:
+            # 创建MongoDB客户端
+            source_client = create_mongo_client(
+                source.host,
+                int(source.port),
+                source.username if source.username else None,
+                source.password if source.password else None
+            )
+
+            target_client = create_mongo_client(
+                target.host,
+                int(target.port),
+                target.username if target.username else None,
+                target.password if target.password else None
+            )
+
+            # 创建索引管理器
+            index_manager = IndexManager(source_client, target_client)
+
+            # 获取成功的数据库名列表
+            successful_db_names = [db[0] for db in successful_dbs]
+
+            # 并发创建索引
+            index_results = index_manager.recreate_indexes_for_databases(
+                successful_db_names,
+                max_workers=maxThreads
+            )
+
+            # 打印索引创建统计
+            print(f"\n📊 索引创建统计:")
+            print(f"   总数据库数: {index_results['total_databases']}")
+            print(f"   成功数据库数: {index_results['successful_databases']}")
+            print(f"   总索引数: {index_results['total_indexes']}")
+            print(f"   成功创建索引数: {index_results['created_indexes']}")
+            print(f"   索引创建耗时: {index_results['duration']:.2f}秒")
+
+            if index_results['failed_databases']:
+                print(f"   ❌ 失败数据库:")
+                for failed_db in index_results['failed_databases']:
+                    print(f"      - {failed_db['database']}: {failed_db.get('error', '未知错误')}")
+
+            # 关闭客户端连接
+            source_client.close()
+            target_client.close()
+
+        except Exception as e:
+            print(f"⚠️  索引创建过程中发生错误: {e}")
+
     print("💤 程序执行完成，进入休眠状态...")
 
     try:
