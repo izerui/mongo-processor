@@ -49,7 +49,7 @@ databases=code2,ddd,xxx
 # 线程池并发配置（同时处理的数据库数量）
 maxThreads = 4
 # 单库导出导入并行处理collection的并发数
-numParallelCollections = 8
+numParallelCollections = 16
 # 每个集合的插入工作线程数
 numInsertionWorkersPerCollection = 8
 
