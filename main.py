@@ -53,6 +53,7 @@ def get_large_collections_info(source: Mongo, database: str,
             try:
                 collection = db[collection_name]
                 doc_count = collection.count_documents({})
+                print(f"   📊 集合 {collection_name}: {doc_count:,} 条文档")
                 if doc_count >= threshold_docs:
                     large_collections.append((collection_name, doc_count))
             except Exception as e:

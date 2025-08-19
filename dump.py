@@ -136,7 +136,7 @@ class MyDump(Shell):
             if i == partitions - 1:
                 # 最后一个分区包含剩余所有文档
                 query_filter = {partition_field: {"$gte": ObjectId(current_id)}}
-                query_str = f'{{"{partition_field}": {{"$gte": ObjectId("{current_id}")}}}}'
+                query_str = f'{{"{partition_field}": {{"$gte": {{"$oid": "{current_id}"}}}}}}'
             else:
                 # 计算当前分区的结束_id
                 skip_docs = docs_per_partition * (i + 1)
@@ -148,7 +148,7 @@ class MyDump(Shell):
 
                 end_id = str(end_doc[partition_field])
                 query_filter = {partition_field: {"$gte": ObjectId(current_id), "$lt": ObjectId(end_id)}}
-                query_str = f'{{"{partition_field}": {{"$gte": ObjectId("{current_id}"), "$lt": ObjectId("{end_id}")}}}}'
+                query_str = f'{{"{partition_field}": {{"$gte": {{"$oid": "{current_id}"}}, "$lt": {{"$oid": "{end_id}"}}}}}}'
                 current_id = end_id
 
             output_dir = f"{dump_root_path}/{database}_{collection}_part{i}"
