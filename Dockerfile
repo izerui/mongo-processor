@@ -24,8 +24,7 @@ COPY mongodb-database-tools/ ./mongodb-database-tools/
 # 复制项目文件
 COPY pyproject.toml .
 COPY uv.lock .
-COPY main.py .
-COPY dump.py .
+COPY src/ ./src/
 COPY config.ini.sample ./config.ini
 COPY README.md .
 
@@ -36,4 +35,4 @@ RUN uv sync --frozen
 RUN mkdir -p /app/dumps
 
 # 运行命令
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uv", "run", "python", "src/main.py"]
