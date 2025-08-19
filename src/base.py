@@ -35,8 +35,9 @@ class Mongo:
         self.password = db_pass
 
 
-# 获取当前脚本目录
+# 获取当前脚本目录（src目录）
 script_dir = os.path.dirname(os.path.abspath(__file__))
+# 获取项目根目录（包含mongodb-database-tools的目录）
 base_dir = os.path.dirname(script_dir)
 
 if platform.system() == 'Windows':
