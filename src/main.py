@@ -25,7 +25,7 @@ def cleanup_dump_folder(dump_folder: Path) -> None:
 
 def process_single_database(db_name: str, source: Mongo, target: Mongo,
                             numParallelCollections: int, numInsertionWorkersPerCollection: int, dump_folder: Path) -> \
-Tuple[str, bool, float]:
+Tuple[str, bool, float, float, float]:
     """
     处理单个数据库的导出、导入和清理
     :param db_name: 数据库名称
@@ -34,9 +34,12 @@ Tuple[str, bool, float]:
     :param numParallelCollections: 并发数
     :param numInsertionWorkersPerCollection: 每个集合的插入工作线程数
     :param dump_folder: 导出目录
-    :return: (数据库名, 是否成功, 总耗时)
+    :return: (数据库名, 是否成功, 总耗时, 导出时间, 导入时间)
     """
     start_time = time.time()
+    export_time = 0.0
+    import_time = 0.0
+
     try:
         # 导出
         export_start_time = time.time()
@@ -59,12 +62,12 @@ Tuple[str, bool, float]:
             shutil.rmtree(db_export_dir)
 
         total_time = time.time() - start_time
-        return db_name, True, total_time
+        return db_name, True, total_time, export_time, import_time
 
     except Exception as e:
         total_time = time.time() - start_time
         print(f' ❌ 处理数据库 {db_name} 失败: {str(e)}')
-        return db_name, False, total_time
+        return db_name, False, total_time, export_time, import_time
 
 
 def main():
@@ -120,23 +123,23 @@ def main():
             for future in concurrent.futures.as_completed(future_to_db):
                 db_name = future_to_db[future]
                 try:
-                    db_name, success, duration = future.result()
+                    db_name, success, duration, export_time, import_time = future.result()
                     if success:
-                        successful_dbs.append((db_name, duration))
+                        successful_dbs.append((db_name, duration, export_time, import_time))
                         print(f' 🎉 数据库 {db_name} 处理完成 (耗时: {duration:.2f}秒)')
                     else:
-                        failed_dbs.append((db_name, duration))
+                        failed_dbs.append((db_name, duration, export_time, import_time))
                         print(f' 💥 数据库 {db_name} 处理失败 (耗时: {duration:.2f}秒)')
 
                 except KeyboardInterrupt:
                     print(f" ⚠️  用户中断处理数据库: {db_name}")
-                    failed_dbs.append((db_name, 0))
+                    failed_dbs.append((db_name, 0, 0, 0))
                     break
                 except TimeoutError as e:
                     print(f" ⏰ 数据库 {db_name} 处理超时: {str(e)}")
-                    failed_dbs.append((db_name, 0))
+                    failed_dbs.append((db_name, 0, 0, 0))
                 except Exception as e:
-                    failed_dbs.append((db_name, 0))
+                    failed_dbs.append((db_name, 0, 0, 0))
                     print(f' 💥 数据库 {db_name} 处理时发生异常: {str(e)}')
         except KeyboardInterrupt:
             print("\n ⚠️  收到中断信号，正在优雅退出...")
@@ -147,16 +150,29 @@ def main():
 
     total_time = time.time() - total_start_time
 
+    # 计算总计时间
+    total_export_time = sum(db[2] for db in successful_dbs) + sum(db[2] for db in failed_dbs)
+    total_import_time = sum(db[3] for db in successful_dbs) + sum(db[3] for db in failed_dbs)
+
     # 打印统计信息
     print(f"\n📈 处理完成统计:")
     print(f"   ✅ 成功: {len(successful_dbs)}个数据库")
-    for db_name, duration in successful_dbs:
-        print(f"      - {db_name}: {duration:.2f}秒")
+    for db_name, duration, export_time, import_time in successful_dbs:
+        print(f"      - {db_name}: {duration:.2f}秒 (导出: {export_time:.2f}秒, 导入: {import_time:.2f}秒)")
 
     if failed_dbs:
         print(f"   ❌ 失败: {len(failed_dbs)}个数据库")
-        for db_name, duration in failed_dbs:
-            print(f"      - {db_name}: {duration:.2f}秒")
+        for db_name, duration, export_time, import_time in failed_dbs:
+            print(f"      - {db_name}: {duration:.2f}秒 (导出: {export_time:.2f}秒, 导入: {import_time:.2f}秒)")
+
+    print(f"\n📊 总计统计:")
+    print(f"   总导出时间: {total_export_time:.2f}秒")
+    print(f"   总导入时间: {total_import_time:.2f}秒")
+    print(f"   总处理时间: {total_time:.2f}秒")
+    if total_export_time + total_import_time > 0:
+        print(f"   并行效率: {total_time / (total_export_time + total_import_time):.2f}x")
+    else:
+        print(f"   并行效率: N/A")
 
     print(f' 🎯 所有数据库操作完成，总耗时: {total_time:.2f}秒')
 
@@ -164,7 +180,7 @@ def main():
     if failed_dbs:
         print("⚠️  部分数据库处理失败，请检查日志")
         print("   失败的数据库:")
-        for db_name, duration in failed_dbs:
+        for db_name, duration, export_time, import_time in failed_dbs:
             print(f"      - {db_name}")
 
     # 程序结束
