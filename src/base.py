@@ -35,12 +35,16 @@ class Mongo:
         self.password = db_pass
 
 
+# 获取当前脚本目录
+script_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.dirname(script_dir)
+
 if platform.system() == 'Windows':
-    mongodump_exe = os.path.join('..', 'mongodb-database-tools', 'windows-x86_64-100.13.0', 'mongodump.exe')
-    mongorestore_exe = os.path.join('..', 'mongodb-database-tools', 'windows-x86_64-100.13.0', 'mongorestore.exe')
+    mongodump_exe = os.path.join(base_dir, 'mongodb-database-tools', 'windows-x86_64-100.13.0', 'mongodump.exe')
+    mongorestore_exe = os.path.join(base_dir, 'mongodb-database-tools', 'windows-x86_64-100.13.0', 'mongorestore.exe')
 elif platform.system() == 'Linux':
-    mongodump_exe = os.path.join('..', 'mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongodump')
-    mongorestore_exe = os.path.join('..', 'mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongorestore')
+    mongodump_exe = os.path.join(base_dir, 'mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongodump')
+    mongorestore_exe = os.path.join(base_dir, 'mongodb-database-tools', 'rhel93-x86_64-100.13.0', 'mongorestore')
 elif platform.system() == 'Darwin':
-    mongodump_exe = os.path.join('..', 'mongodb-database-tools', 'macos-arm64-100.13.0', 'mongodump')
-    mongorestore_exe = os.path.join('..', 'mongodb-database-tools', 'macos-arm64-100.13.0', 'mongorestore')
+    mongodump_exe = os.path.join(base_dir, 'mongodb-database-tools', 'macos-arm64-100.13.0', 'mongodump')
+    mongorestore_exe = os.path.join(base_dir, 'mongodb-database-tools', 'macos-arm64-100.13.0', 'mongorestore')
