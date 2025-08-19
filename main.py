@@ -98,16 +98,16 @@ def process_single_database(db_name: str, source: Mongo, target: Mongo,
             for collection_name, doc_count in large_collections:
                 print(f'   📊 大集合 {collection_name}: {doc_count:,} 条文档，使用分区导出')
 
-                # 计算分区数量：每50万条一个分区，最多8个
-                partitions = min(8, max(2, doc_count // 500000))
+                # 计算分区数量：每50万条一个分区，最多16个
+                partitions = min(16, max(2, doc_count // 500000))
 
                 # 分区导出大集合
-                partition_dirs = mydump.export_collection_partitioned(
+                partition_dirs = mydump.export_collection_partitioned_concurrent(
                     database=db_name,
                     collection=collection_name,
                     dump_root_path=str(dump_folder),
                     partition_field="_id",
-                    partitions=partitions
+                    partitions=partitions,
                 )
                 all_partition_dirs.extend(partition_dirs)
 
