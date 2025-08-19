@@ -35,4 +35,4 @@ RUN uv sync --frozen
 RUN mkdir -p /app/dumps
 
 # 运行命令
-CMD ["uv", "run", "python", "src/main.py"]
+CMD ["uv", "run", "python", "/app/src/main.py"]
