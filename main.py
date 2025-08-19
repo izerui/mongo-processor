@@ -6,6 +6,7 @@ import sys
 import time
 import concurrent.futures
 import subprocess
+from pymongo import MongoClient
 from configparser import ConfigParser
 from pathlib import Path
 
@@ -34,26 +35,31 @@ def get_large_collections_info(source: Mongo, database: str,
     :param threshold_docs: 大集合阈值
     :return: [(集合名, 文档数量), ...]
     """
-    auth_append = f'--username={source.username} --password="{source.password}" --authenticationDatabase=admin' if source.username else ''
-
     try:
+        # 构建MongoDB连接字符串
+        if source.username and source.password:
+            connection_string = f"mongodb://{source.username}:{source.password}@{source.host}:{source.port}/{database}?authSource=admin&directConnection=true"
+        else:
+            connection_string = f"mongodb://{source.host}:{source.port}/{database}"
+
+        client = MongoClient(connection_string)
+        db = client[database]
+
         # 获取所有集合
-        collections_cmd = f'mongo --host="{source.host}:{source.port}" {auth_append} --quiet --eval "db.getSiblingDB(\'{database}\').getCollectionNames()" --norc'
-        result = subprocess.run(collections_cmd, shell=True, capture_output=True, text=True)
-        collections = eval(result.stdout.strip())
+        collections = db.list_collection_names()
 
         large_collections = []
-        for collection in collections:
-            # 获取文档数量
-            count_cmd = f'mongo --host="{source.host}:{source.port}" {auth_append} --quiet --eval "db.getSiblingDB(\'{database}\').{collection}.countDocuments()" --norc'
-            count_result = subprocess.run(count_cmd, shell=True, capture_output=True, text=True)
+        for collection_name in collections:
             try:
-                doc_count = int(count_result.stdout.strip())
+                collection = db[collection_name]
+                doc_count = collection.count_documents({})
                 if doc_count >= threshold_docs:
-                    large_collections.append((collection, doc_count))
-            except:
+                    large_collections.append((collection_name, doc_count))
+            except Exception as e:
+                print(f"⚠️  获取集合 {collection_name} 文档数量失败: {str(e)}")
                 continue
 
+        client.close()
         return large_collections
     except Exception as e:
         print(f"⚠️  获取大集合信息失败: {str(e)}")

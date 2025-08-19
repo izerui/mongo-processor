@@ -3,6 +3,8 @@ import platform
 import math
 from subprocess import Popen, PIPE, STDOUT
 from typing import List, Tuple, Optional
+from pymongo import MongoClient
+from bson import ObjectId
 
 if platform.system() == 'Windows':
     mongodump_exe = os.path.join('mongodb-database-tools', 'windows-x86_64-100.13.0', 'mongodump.exe')
@@ -89,16 +91,21 @@ class MyDump(Shell):
         :param partition_size: 每个分区的文档数量，如果提供则按数量分区
         :return: 导出的文件路径列表
         """
-        auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin' if self.mongo.username else ''
+        # 构建MongoDB连接字符串
+        if self.mongo.username and self.mongo.password:
+            connection_string = f"mongodb://{self.mongo.username}:{self.mongo.password}@{self.mongo.host}:{self.mongo.port}/{database}?authSource=admin"
+        else:
+            connection_string = f"mongodb://{self.mongo.host}:{self.mongo.port}/{database}"
 
-        # 获取集合的文档总数和范围
-        count_cmd = f'mongo --host="{self.mongo.host}:{self.mongo.port}" {auth_append} --quiet --eval "db.getSiblingDB(\'{database}\').{collection}.countDocuments()" --norc'
-        process = Popen(count_cmd, stdout=PIPE, stderr=STDOUT, shell=True)
-        total_docs = int(process.stdout.read().decode().strip())
-        process.wait()
+        client = MongoClient(connection_string)
+        db = client[database]
+        coll = db[collection]
 
+        # 获取集合的文档总数
+        total_docs = coll.count_documents({})
         if total_docs == 0:
             print(f"集合 {collection} 为空，跳过导出")
+            client.close()
             return []
 
         # 计算分区大小
@@ -108,30 +115,40 @@ class MyDump(Shell):
         docs_per_partition = total_docs // partitions
 
         # 获取最小和最大_id
-        range_cmd = f'mongo --host="{self.mongo.host}:{self.mongo.port}" {auth_append} --quiet --eval "const docs=db.getSiblingDB(\'{database}\').{collection}.find().sort({{_id:1}}).limit(1).toArray(); const maxDocs=db.getSiblingDB(\'{database}\').{collection}.find().sort({{_id:-1}}).limit(1).toArray(); print(docs[0]._id + \',\' + maxDocs[0]._id)" --norc'
-        process = Popen(range_cmd, stdout=PIPE, stderr=STDOUT, shell=True)
-        range_result = process.stdout.read().decode().strip()
-        process.wait()
+        min_doc = coll.find_one(sort=[(partition_field, 1)])
+        max_doc = coll.find_one(sort=[(partition_field, -1)])
 
-        min_id, max_id = range_result.split(',')
+        if not min_doc or not max_doc:
+            print(f"集合 {collection} 无法获取文档范围")
+            client.close()
+            return []
+
+        min_id = str(min_doc[partition_field])
+        max_id = str(max_doc[partition_field])
 
         # 生成查询条件并并发导出
         exported_files = []
         current_id = min_id
 
+        auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin' if self.mongo.username else ''
+
         for i in range(partitions):
             if i == partitions - 1:
                 # 最后一个分区包含剩余所有文档
-                query = f'{{"{partition_field}": {{$gte: ObjectId("{current_id}")}}}}'
+                query_filter = {partition_field: {"$gte": ObjectId(current_id)}}
+                query_str = f'{{"{partition_field}": {{"$gte": ObjectId("{current_id}")}}}}'
             else:
                 # 计算当前分区的结束_id
                 skip_docs = docs_per_partition * (i + 1)
-                end_id_cmd = f'mongo --host="{self.mongo.host}:{self.mongo.port}" {auth_append} --quiet --eval "const doc=db.getSiblingDB(\'{database}\').{collection}.find().sort({{_id:1}}).skip({skip_docs}).limit(1).toArray()[0]; print(doc._id)" --norc'
-                process = Popen(end_id_cmd, stdout=PIPE, stderr=STDOUT, shell=True)
-                end_id = process.stdout.read().decode().strip()
-                process.wait()
+                cursor = coll.find().sort(partition_field, 1).skip(skip_docs).limit(1)
+                end_doc = next(cursor, None)
 
-                query = f'{{"{partition_field}": {{$gte: ObjectId("{current_id}"), $lt: ObjectId("{end_id}")}}}}'
+                if not end_doc:
+                    break
+
+                end_id = str(end_doc[partition_field])
+                query_filter = {partition_field: {"$gte": ObjectId(current_id), "$lt": ObjectId(end_id)}}
+                query_str = f'{{"{partition_field}": {{"$gte": ObjectId("{current_id}"), "$lt": ObjectId("{end_id}")}}}}'
                 current_id = end_id
 
             output_dir = f"{dump_root_path}/{database}_{collection}_part{i}"
@@ -140,15 +157,16 @@ class MyDump(Shell):
                 f'--host="{self.mongo.host}:{self.mongo.port}" '
                 f'--db={database} '
                 f'--collection={collection} '
-                f'--query=\'{query}\' '
+                f'--query=\'{query_str}\' '
                 f'--out={output_dir} '
                 f'--gzip {auth_append} '
             )
 
-            print(f"导出分区 {i+1}/{partitions}: {query}")
+            print(f"导出分区 {i+1}/{partitions}: {query_str}")
             self._exe_command(export_cmd)
             exported_files.append(output_dir)
 
+        client.close()
         return exported_files
 
     def export_large_collection(self, database: str, collection: str, dump_root_path: str,
@@ -163,13 +181,22 @@ class MyDump(Shell):
         :param partition_field: 分区字段
         :return: 是否使用了分区导出
         """
-        auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin' if self.mongo.username else ''
+        # 构建MongoDB连接字符串
+        if self.mongo.username and self.mongo.password:
+            connection_string = f"mongodb://{self.mongo.username}:{self.mongo.password}@{self.mongo.host}:{self.mongo.port}/{database}?authSource=admin"
+        else:
+            connection_string = f"mongodb://{self.mongo.host}:{self.mongo.port}/{database}"
+
+        client = MongoClient(connection_string)
+        db = client[database]
+        coll = db[collection]
 
         # 获取集合的文档总数
-        count_cmd = f'mongo --host="{self.mongo.host}:{self.mongo.port}" {auth_append} --quiet --eval "db.getSiblingDB(\'{database}\').{collection}.countDocuments()" --norc'
-        process = Popen(count_cmd, stdout=PIPE, stderr=STDOUT, shell=True)
-        total_docs = int(process.stdout.read().decode().strip())
-        process.wait()
+        total_docs = coll.count_documents({})
+
+        client.close()
+
+        auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin' if self.mongo.username else ''
 
         if total_docs > threshold_docs:
             print(f"集合 {collection} 有 {total_docs} 条文档，使用分区并发导出")

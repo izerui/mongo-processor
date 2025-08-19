@@ -6,8 +6,18 @@ requires-python = ">=3.12"
 name = "mongo-processor"
 version = "0.1.0"
 source = { virtual = "." }
+dependencies = [
+    { name = "pymongo" },
+]
 
 [package.metadata]
+requires-dist = [{ name = "pymongo", specifier = "==3.13.0" }]
 
 [package.metadata.requires-dev]
 dev = []
+
+[[package]]
+name = "pymongo"
+version = "3.13.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/ff/9b08f29b57384e1f55080d15a12ba4908d93d46cd7fe83c5c562fdcd3400/pymongo-3.13.0.tar.gz", hash = "sha256:e22d6cf5802cd09b674c307cc9e03870b8c37c503ebec3d25b86f2ce8c535dc7", size = 804388, upload-time = "2022-11-01T19:06:29.025Z" }
