@@ -55,7 +55,6 @@ class MyRestore(Shell):
 
             # 执行导入
             self._exe_command(import_cmd)
-            print(f'✅ 数据库 {database} 导入完成')
 
         except Exception as e:
             print(f'❌ 导入数据库 {database} 失败: {e}')

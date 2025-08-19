@@ -45,7 +45,6 @@ class MyDump(Shell):
 
             # 执行导出
             self._exe_command(export_cmd)
-            print(f'✅ 数据库 {database} 导出完成')
 
             # 返回数据库目录路径
             return  os.path.join(dump_root_path, database)
