@@ -54,7 +54,7 @@ class MyDump(Shell):
 
     def _export_db_with_sharding(self, database: str, dump_root_path: str):
         """
-        支持分片的数据库导出 - 使用临时目录和重命名机制
+        支持分片的数据库导出 - 使用快速统计信息优化判断
         """
         import shutil
 
@@ -67,32 +67,41 @@ class MyDump(Shell):
 
             print(f"📊 数据库 {database} 包含 {len(collections)} 个collection")
 
-            # 分析哪些collection需要分片
+            # 使用快速统计信息分析哪些collection需要分片
             large_collections = []
             small_collections = []
 
+            # 批量获取所有集合的统计信息
+            collection_counts = self._get_collection_counts_fast(database)
+
             for collection_name in collections:
-                if self._should_shard_collection(database, collection_name):
+                count = collection_counts.get(collection_name, 0)
+                if count >= self.shard_config.min_documents_for_shard:
                     large_collections.append(collection_name)
-                    print(f"🔄 Collection {collection_name} 将使用分片导出")
                 else:
                     small_collections.append(collection_name)
-                    print(f"📦 Collection {collection_name} 使用常规导出")
 
             # 步骤1: 使用exclude参数导出所有非大集合
             if small_collections:
                 print(f"📦 开始导出 {len(small_collections)} 个非大集合...")
                 self._export_collections_with_exclude(database, large_collections, dump_root_path)
 
-            # 步骤2: 分片导出所有大集合
+            # 步骤2: 分片导出所有大集合（使用精确计数计算分片）
             if large_collections:
                 print(f"🔄 开始分片导出 {len(large_collections)} 个大集合...")
                 with ThreadPoolExecutor(max_workers=self.numParallelCollections) as executor:
                     futures = []
                     for collection_name in large_collections:
+                        # 获取精确计数用于分片计算
+                        if not self._connect():
+                            continue
+                        db = self.client[database]
+                        collection = db[collection_name]
+                        exact_count = collection.count_documents({})
+
                         future = executor.submit(
                             self._export_collection_shards,
-                            database, collection_name, dump_root_path
+                            database, collection_name, dump_root_path, exact_count
                         )
                         futures.append((future, collection_name))
 
@@ -143,22 +152,28 @@ class MyDump(Shell):
             print(f'❌ 导出非大集合失败: {e}')
             raise
 
-    def _export_collection_shards(self, db_name: str, collection_name: str, dump_root_path: str):
+    def _export_collection_shards(self, database: str, collection_name: str, dump_root_path: str, exact_count: int = None):
         """分片导出单个collection，使用临时目录和重命名机制"""
         try:
-            # 计算分片数量
-            shard_count = self._calculate_optimal_shard_count(db_name, collection_name)
+            # 计算分片数量（使用精确计数）
+            if exact_count is None:
+                if not self._connect():
+                    return self._export_collection_normal(database, collection_name, dump_root_path)
+                db = self.client[database]
+                exact_count = db[collection_name].count_documents({})
+
+            shard_count = self._calculate_optimal_shard_count(database, collection_name, exact_count)
 
             # 获取分片范围
-            ranges = self._get_collection_objectid_ranges(db_name, collection_name, shard_count)
+            ranges = self._get_collection_objectid_ranges(database, collection_name, shard_count, exact_count)
             if not ranges:
                 print(f"⚠️ 无法获取集合 {db_name}.{collection_name} 的分片范围，使用常规导出")
                 return self._export_collection_normal(db_name, collection_name, dump_root_path)
 
-            print(f"🔄 开始分片导出 {db_name}.{collection_name}，分片数: {len(ranges)}")
+            print(f"🔄 开始分片导出 {database}.{collection_name}，分片数: {len(ranges)}，文档数: {exact_count:,}")
 
             # 创建分片导出目录结构: dumps/{database}/{collection}_partXXX/
-            dumps_dir = os.path.join(dump_root_path, db_name)
+            dumps_dir = os.path.join(dump_root_path, database)
             os.makedirs(dumps_dir, exist_ok=True)
 
             # 并发导出分片（并发度=分片数）
@@ -167,7 +182,7 @@ class MyDump(Shell):
                 for i, obj_range in enumerate(ranges):
                     future = executor.submit(
                         self._export_single_shard,
-                        db_name, collection_name, dump_root_path, i, obj_range
+                        database, collection_name, dump_root_path, i, obj_range
                     )
                     futures.append(future)
 
@@ -179,7 +194,7 @@ class MyDump(Shell):
                         raise
 
             # 数据库目录
-            db_dir = os.path.join(dump_root_path, 'dumps', db_name)
+            db_dir = os.path.join(dump_root_path, database)
             os.makedirs(db_dir, exist_ok=True)
 
             # 保存分片元数据到数据库目录
@@ -398,6 +413,38 @@ class MyDump(Shell):
             print(f"❌ 获取数据库 {database} collection列表失败: {e}")
             return []
 
+    def _get_collection_counts_fast(self, database: str) -> dict:
+        """使用快速统计信息获取集合文档数量"""
+        try:
+            if not self._connect():
+                return {}
+
+            db = self.client[database]
+            collection_stats = {}
+
+            # 使用listCollections获取所有集合
+            collections = db.list_collections()
+            for collection_info in collections:
+                collection_name = collection_info['name']
+                if collection_name.startswith('system.'):
+                    continue
+
+                try:
+                    # 使用stats()获取快速统计信息
+                    stats = db.command('collStats', collection_name)
+                    count = stats.get('count', 0)
+                    collection_stats[collection_name] = count
+                    print(f"📊 {database}.{collection_name}: {count:,}条文档")
+                except Exception as e:
+                    print(f"⚠️ 获取{database}.{collection_name}统计失败: {e}")
+                    collection_stats[collection_name] = 0
+
+            return collection_stats
+
+        except Exception as e:
+            print(f"❌ 获取数据库 {database} 集合统计信息失败: {e}")
+            return {}
+
     def _export_db_normal(self, database: str, dump_root_path: str):
         """常规数据库导出（不使用分片）"""
         try:
@@ -445,19 +492,17 @@ class MyDump(Shell):
             print(f'❌ 常规导出数据库 {database} 失败: {e}')
             raise
 
-    def _should_shard_collection(self, database: str, collection_name: str) -> bool:
+    def _should_shard_collection(self, database: str, collection_name: str, doc_count: int = None) -> bool:
         """判断collection是否需要分片导出"""
         try:
-            if not self._connect():
-                return False
+            if doc_count is None:
+                if not self._connect():
+                    return False
+                db = self.client[database]
+                collection = db[collection_name]
+                doc_count = collection.estimated_document_count()
 
-            db = self.client[database]
-            collection = db[collection_name]
-
-            # 获取文档数量
-            doc_count = collection.estimated_document_count()
-
-            # 只有大集合才显示条目数
+            # 使用精确计数判断是否需要分片
             is_large = doc_count >= self.shard_config.min_documents_for_shard
             if is_large:
                 print(f"📊 大集合 {database}.{collection_name}: {doc_count:,} 条记录")
@@ -468,17 +513,16 @@ class MyDump(Shell):
             print(f"⚠️ 判断collection {database}.{collection_name} 分片需求失败: {e}")
             return False
 
-    def _calculate_optimal_shard_count(self, db_name: str, collection_name: str) -> int:
-        """计算最优的分片数量"""
+    def _calculate_optimal_shard_count(self, database: str, collection_name: str, doc_count: int = None) -> int:
+        """计算最优分片数量（使用精确计数）"""
         try:
-            if not self._connect():
-                return 1
+            if doc_count is None:
+                if not self._connect():
+                    return 1
 
-            db = self.client[db_name]
-            collection = db[collection_name]
-
-            # 获取文档数量
-            doc_count = collection.estimated_document_count()
+                db = self.client[database]
+                collection = db[collection_name]
+                doc_count = collection.count_documents({})
 
             # 根据文档数量计算分片数
             if doc_count < self.shard_config.min_documents_for_shard:
@@ -499,7 +543,7 @@ class MyDump(Shell):
             print(f"⚠️ 计算分片数量失败: {e}")
             return self.shard_config.default_shard_count
 
-    def _get_collection_objectid_ranges(self, db_name: str, collection_name: str, shard_count: int) -> List[
+    def _get_collection_objectid_ranges(self, db_name: str, collection_name: str, shard_count: int, doc_count: int = None) -> List[
         ObjectIdRange]:
         """获取collection的ObjectId分片范围"""
         try:
@@ -508,6 +552,10 @@ class MyDump(Shell):
 
             db = self.client[db_name]
             collection = db[collection_name]
+
+            # 如果提供了精确计数且分片数为1，直接返回空列表
+            if doc_count is not None and shard_count <= 1:
+                return []
 
             # 获取最小和最大的ObjectId
             min_doc = collection.find_one(sort=[("_id", 1)])
