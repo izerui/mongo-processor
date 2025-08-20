@@ -66,19 +66,13 @@ class MyRestore(Shell):
                 print(f"⚠️ 数据库目录 {db_dump_dir} 中没有找到collection文件")
                 return
 
-            print(f"📊 发现 {len(collections)} 个collection需要恢复: {collections}")
-
-            # 调试：列出目录中的所有文件
-            print(f"📁 目录内容: {os.listdir(db_dump_dir)}")
+            print(f"📊 发现 {len(collections)} 个collection需要恢复")
 
             # 分析哪些collection需要分片恢复
             collections_to_shard = []
             collections_normal = []
 
             for collection_name in collections:
-                # 检查是否存在分片元数据
-                metadata_file = os.path.join(db_dump_dir, f"{collection_name}_shards.json")
-                print(f"🔍 检查分片元文件: {metadata_file}")
                 metadata = self._read_shard_metadata(database, collection_name, db_dump_dir)
                 if metadata:
                     collections_to_shard.append((collection_name, metadata))
@@ -164,7 +158,7 @@ class MyRestore(Shell):
             raise
 
     def _restore_collection_with_shards(self, db_name: str, collection_name: str, db_dump_dir: str, metadata: Dict[str, Any]):
-        """使用分片数据恢复单个collection"""
+        """使用分片数据恢复单个collection - 直接导入分片文件，无需合并"""
         try:
             shard_count = metadata['shard_count']
             print(f"🔄 开始恢复 {collection_name} 的 {shard_count} 个分片")
@@ -174,40 +168,51 @@ class MyRestore(Shell):
             password_append = f'--password="{self.mongo.password}"' if self.mongo.password else ''
             auth_append = f'--authenticationDatabase=admin' if self.mongo.username else ''
 
-            # 恢复每个分片
-            for i in range(shard_count):
-                shard_suffix = f"_shard_{i:03d}"
-                shard_collection_name = f"{collection_name}{shard_suffix}"
+            # 并发恢复所有分片
+            with ThreadPoolExecutor(max_workers=self.shard_config.shard_concurrency) as executor:
+                futures = []
+                for i in range(shard_count):
+                    shard_suffix = f"_shard_{i:03d}"
+                    shard_collection_name = f"{collection_name}{shard_suffix}"
 
-                shard_bson = os.path.join(db_dump_dir, f"{shard_collection_name}.bson")
-                if not os.path.exists(shard_bson):
-                    print(f"⚠️ 分片文件不存在: {shard_bson}")
-                    continue
+                    shard_bson = os.path.join(db_dump_dir, f"{shard_collection_name}.bson")
+                    if not os.path.exists(shard_bson):
+                        raise Exception(f"分片恢复失败: 文件不存在 {shard_bson}")
 
-                print(f"🔄 恢复分片 {i + 1}/{shard_count}: {shard_collection_name}")
+                    file_size = os.path.getsize(shard_bson)
+                    if file_size == 0:
+                        raise Exception(f"分片恢复失败: 文件为空 {shard_bson} (大小: {file_size} 字节)")
 
-                # 为了避免数据冲突，使用临时collection名称
-                temp_collection = f"{collection_name}_temp_shard_{i}"
+                    # 提交分片恢复任务
+                    restore_cmd = (
+                        f'{mongorestore_exe} '
+                        f'--host="{self.mongo.host}:{self.mongo.port}" '
+                        f'{user_append} {password_append} {auth_append} '
+                        f'--db={db_name} '
+                        f'--collection={collection_name} '
+                        f'--numInsertionWorkersPerCollection={self.num_insertion_workers} '
+                        f'--noIndexRestore '
+                        f'--drop '
+                        f'"{shard_bson}"'
+                    )
 
-                # 构建恢复命令
-                restore_cmd = (
-                    f'{mongorestore_exe} '
-                    f'--host="{self.mongo.host}:{self.mongo.port}" '
-                    f'{user_append} {password_append} {auth_append} '
-                    f'--db={db_name} '
-                    f'--collection={temp_collection} '
-                    f'--numInsertionWorkersPerCollection={self.num_insertion_workers} '
-                    f'--noIndexRestore '
-                    f'"{shard_bson}"'
-                )
+                    future = executor.submit(self._exe_command, restore_cmd)
+                    futures.append((future, i))
 
-                # 执行恢复
-                self._exe_command(restore_cmd)
+                # 等待所有分片恢复完成
+                for future, i in futures:
+                    try:
+                        future.result()
+                        print(f"✅ 分片 {i + 1}/{shard_count} 恢复完成")
+                    except Exception as e:
+                        print(f"❌ 分片 {i + 1} 恢复失败: {e}")
+                        raise
 
-            # 合并所有临时collection到目标collection
-            self._merge_temp_collections(db_name, collection_name, shard_count)
+            print(f"✅ Collection {collection_name} 分片恢复完成")
 
-            print(f"🎉 Collection {collection_name} 分片恢复完成")
+        except Exception as e:
+            print(f"❌ 分片恢复collection {collection_name} 失败: {e}")
+            raise
 
         except Exception as e:
             print(f"❌ 分片恢复collection {collection_name} 失败: {e}")
@@ -220,8 +225,13 @@ class MyRestore(Shell):
             collection_metadata = os.path.join(db_dump_dir, f"{collection_name}.metadata.json")
 
             if not os.path.exists(collection_bson):
-                print(f"⚠️ Collection文件不存在: {collection_bson}")
-                return
+                raise Exception(f"常规恢复失败: 文件不存在 {collection_bson}")
+
+            file_size = os.path.getsize(collection_bson)
+            if file_size == 0:
+                raise Exception(f"常规恢复失败: 文件为空 {collection_bson} (大小: {file_size} 字节)")
+
+            print(f"✅ 常规恢复文件检查通过: {collection_bson} (大小: {file_size} 字节)")
 
             # 构建认证参数
             user_append = f'--username="{self.mongo.username}"' if self.mongo.username else ''
@@ -250,56 +260,7 @@ class MyRestore(Shell):
             print(f"❌ 常规恢复collection {collection_name} 失败: {e}")
             raise
 
-    def _merge_temp_collections(self, db_name: str, collection_name: str, shard_count: int):
-        """合并临时collection到目标collection"""
-        try:
-            # 建立MongoDB连接
-            if self.mongo.username and self.mongo.password:
-                uri = f"mongodb://{self.mongo.username}:{self.mongo.password}@{self.mongo.host}:{self.mongo.port}/admin"
-            else:
-                uri = f"mongodb://{self.mongo.host}:{self.mongo.port}/"
-
-            client = MongoClient(uri)
-            db = client[db_name]
-
-            # 如果目标collection已存在，先删除
-            if collection_name in db.list_collection_names():
-                db[collection_name].drop()
-                print(f"🗑️ 已删除现有collection: {collection_name}")
-
-            # 合并所有临时collection
-            target_collection = db[collection_name]
-
-            for i in range(shard_count):
-                temp_collection_name = f"{collection_name}_temp_shard_{i}"
-                temp_collection = db[temp_collection_name]
-
-                if temp_collection_name in db.list_collection_names():
-                    # 将临时collection的所有文档复制到目标collection
-                    print(f"🔄 合并分片 {i + 1}/{shard_count}: {temp_collection_name}")
-
-                    # 批量复制数据
-                    batch_size = 10000
-                    cursor = temp_collection.find()
-
-                    while True:
-                        batch = list(cursor.limit(batch_size))
-                        if not batch:
-                            break
-
-                        target_collection.insert_many(batch)
-                        print(f"   已合并 {len(batch)} 条记录")
-
-                    # 删除临时collection
-                    temp_collection.drop()
-                    print(f"🗑️ 已删除临时collection: {temp_collection_name}")
-
-            client.close()
-            print(f"✅ Collection {collection_name} 合并完成")
-
-        except Exception as e:
-            print(f"❌ 合并临时collection失败: {e}")
-            raise
+    # 移除 _merge_temp_collections 方法，不再需要
 
     def _get_collections_from_dump(self, db_dir: str) -> List[str]:
         """从导出目录中获取所有collection名称"""
@@ -359,6 +320,20 @@ class MyRestore(Shell):
         try:
             with open(metadata_file, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
+
+                # 验证分片文件是否都存在且不为空
+                shard_count = metadata.get('shard_count', 0)
+                for i in range(shard_count):
+                    shard_file = os.path.join(db_dump_dir, f"{collection_name}_shard_{i:03d}.bson")
+                    if not os.path.exists(shard_file):
+                        print(f"⚠️ 分片文件缺失: {shard_file}")
+                        return None
+
+                    file_size = os.path.getsize(shard_file)
+                    if file_size == 0:
+                        print(f"⚠️ 分片文件为空: {shard_file} (大小: {file_size} 字节)")
+                        return None
+
                 return metadata
         except Exception as e:
             print(f"❌ 读取分片元数据失败 {metadata_file}: {e}")
@@ -375,7 +350,6 @@ class MyRestore(Shell):
         for filename in os.listdir(db_dump_dir):
             if filename.endswith('.bson') and not filename.endswith('.metadata.json.bson'):
                 collection_name = filename.replace('.bson', '')
-
                 # 排除系统集合
                 if collection_name.startswith('system.'):
                     continue

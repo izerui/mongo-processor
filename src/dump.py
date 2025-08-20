@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from bson import ObjectId
+import shutil
 
 from base import Shell, Mongo, mongodump_exe, ObjectIdRange
 
@@ -53,8 +54,10 @@ class MyDump(Shell):
 
     def _export_db_with_sharding(self, database: str, dump_root_path: str):
         """
-        支持分片的数据库导出 - 使用exclude参数先导出非大集合，再分片导出大集合
+        支持分片的数据库导出 - 使用临时目录和重命名机制
         """
+        import shutil
+
         try:
             # 获取数据库中的所有collection
             collections = self._get_database_collections(database)
@@ -76,15 +79,12 @@ class MyDump(Shell):
                     small_collections.append(collection_name)
                     print(f"📦 Collection {collection_name} 使用常规导出")
 
-            # 构建数据库导出目录路径
-            db_dump_dir = os.path.join(dump_root_path, database)
-
             # 步骤1: 使用exclude参数导出所有非大集合
             if small_collections:
                 print(f"📦 开始导出 {len(small_collections)} 个非大集合...")
                 self._export_collections_with_exclude(database, small_collections, dump_root_path)
 
-            # 步骤2: 分片导出所有大集合
+            # 步骤2: 分片导出所有大集合到临时目录
             if large_collections:
                 print(f"🔄 开始分片导出 {len(large_collections)} 个大集合...")
                 with ThreadPoolExecutor(max_workers=self.numParallelCollections) as executor:
@@ -104,8 +104,8 @@ class MyDump(Shell):
                             print(f"❌ 大集合 {collection_name} 分片导出失败: {e}")
                             raise
 
-            print(f"🎉 数据库 {database} 导出完成")
-            return db_dump_dir
+            # 数据库导出完成
+            return os.path.join(dump_root_path, database)
 
         except Exception as e:
             print(f'❌ 分片导出数据库 {database} 失败: {e}')
@@ -145,7 +145,7 @@ class MyDump(Shell):
             raise
 
     def _export_collection_shards(self, db_name: str, collection_name: str, dump_root_path: str):
-        """分片导出单个collection"""
+        """分片导出单个collection，使用临时目录和重命名机制"""
         try:
             # 计算分片数量
             shard_count = self._calculate_optimal_shard_count(db_name, collection_name)
@@ -158,7 +158,11 @@ class MyDump(Shell):
 
             print(f"🔄 开始分片导出 {db_name}.{collection_name}，分片数: {len(ranges)}")
 
-            # 并发导出分片
+            # 创建分片导出目录结构: dumps/{database}/{collection}_partXXX/
+            dumps_dir = os.path.join(dump_root_path, db_name)
+            os.makedirs(dumps_dir, exist_ok=True)
+
+            # 并发导出分片到临时目录
             with ThreadPoolExecutor(max_workers=self.shard_config.shard_concurrency) as executor:
                 futures = []
                 for i, obj_range in enumerate(ranges):
@@ -176,8 +180,15 @@ class MyDump(Shell):
                         print(f"❌ 分片导出失败: {e}")
                         raise
 
-            # 保存分片元数据
-            self._save_shard_metadata(dump_root_path, db_name, collection_name, ranges)
+            # 分片文件直接导出到目标目录
+            db_dir = os.path.join(dump_root_path, db_name)
+            os.makedirs(db_dir, exist_ok=True)
+
+            # 分片导出已完成，无需移动文件
+            pass
+
+            # 保存分片元数据到分片目录
+            self._save_shard_metadata(db_dir, db_name, collection_name, ranges)
 
             print(f"🎉 集合 {db_name}.{collection_name} 分片导出完成，共 {len(ranges)} 个分片")
 
@@ -187,11 +198,14 @@ class MyDump(Shell):
 
     def _export_single_shard(self, db_name: str, collection_name: str,
                            output_dir: str, shard_idx: int, obj_range: ObjectIdRange):
-        """导出单个分片"""
+        """导出单个分片到指定目录"""
+        """导出单个分片到分片目录"""
         try:
-            # 构建分片文件名
-            shard_suffix = f"_shard_{shard_idx:03d}"
-            shard_collection_name = f"{collection_name}{shard_suffix}"
+            # 构建分片目录名和文件名
+            part_suffix = f"_part{shard_idx+1:03d}"
+            part_dir_name = f"{collection_name}{part_suffix}"
+            part_dir = os.path.join(output_dir, part_dir_name)
+            os.makedirs(part_dir, exist_ok=True)
 
             # 构建查询条件
             query_dict = obj_range.to_query()
@@ -202,39 +216,56 @@ class MyDump(Shell):
             if self.mongo.username and self.mongo.password:
                 auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin'
 
-            # 构建导出命令
+            # 构建导出命令 - 导出到分片目录
             export_cmd = (
                 f'{mongodump_exe} '
                 f'--host="{self.mongo.host}:{self.mongo.port}" '
                 f'--db={db_name} '
                 f'--collection={collection_name} '
-                f'--out={output_dir} '
+                f'--out={part_dir} '
                 f'{auth_append}'
             )
 
-            # 如果有查询条件，添加查询参数
+            # 修复查询条件格式
             if query_dict:
-                export_cmd += f' --query=\'{query_json}\''
+                # 使用正确的Extended JSON格式处理ObjectId
+                query_parts = []
+                if '_id' in query_dict:
+                    id_query = query_dict['_id']
+                    if '$gte' in id_query:
+                        query_parts.append(f'"_id":{{"$gte":{{"$oid":"{str(id_query["$gte"])}"}}}}')
+                    if '$lt' in id_query:
+                        query_parts.append(f'"_id":{{"$lt":{{"$oid":"{str(id_query["$lt"])}"}}}}')
 
-            print(f"🔄 导出分片 {shard_idx + 1}: {query_json}")
+                if query_parts:
+                    query_str = "{" + ",".join(query_parts) + "}"
+                    export_cmd += f' --query=\'{query_str}\''
 
-            # 执行导出命令
+            # 执行分片导出
             self._exe_command(export_cmd)
 
-            # 重命名输出文件以包含分片信息
-            db_dir = os.path.join(output_dir, db_name)
-            original_bson = os.path.join(db_dir, f"{collection_name}.bson")
-            original_metadata = os.path.join(db_dir, f"{collection_name}.metadata.json")
+            # 验证分片目录中的导出结果
+            collection_bson = os.path.join(part_dir, f"{collection_name}.bson")
+            collection_metadata = os.path.join(part_dir, f"{collection_name}.metadata.json")
 
-            shard_bson = os.path.join(db_dir, f"{shard_collection_name}.bson")
-            shard_metadata_path = os.path.join(db_dir, f"{shard_collection_name}.metadata.json")
 
-            # 移动文件
-            if os.path.exists(original_bson):
-                os.rename(original_bson, shard_bson)
 
-            if os.path.exists(original_metadata):
-                os.rename(original_metadata, shard_metadata_path)
+            # 验证文件是否存在且不为空
+            if not os.path.exists(collection_bson):
+                print(f"❌ 分片导出失败: 文件不存在 {collection_bson}")
+                # 检查分片目录内容
+                if os.path.exists(part_dir):
+                    files = os.listdir(part_dir)
+                    print(f"📁 分片目录内容: {files}")
+                raise Exception(f"分片导出失败: 文件不存在 {collection_bson}")
+
+            file_size = os.path.getsize(collection_bson)
+            if file_size == 0:
+                print(f"❌ 分片导出失败: 文件为空 {collection_bson} (大小: {file_size} 字节)")
+                raise Exception(f"分片导出失败: 文件为空 {collection_bson} (大小: {file_size} 字节)")
+
+            # 分片文件已在正确的分片目录中，无需重命名
+            print(f"✅ 分片 {shard_idx + 1} 导出完成到: {part_dir}")
 
         except Exception as e:
             print(f"❌ 导出分片 {shard_idx + 1} 失败: {e}")
@@ -260,6 +291,17 @@ class MyDump(Shell):
 
             # 执行导出
             self._exe_command(export_cmd)
+
+            # 验证文件是否存在且不为空
+            output_bson = os.path.join(dump_root_path, db_name, f"{collection_name}.bson")
+            if not os.path.exists(output_bson):
+                raise Exception(f"常规导出失败: 文件不存在 {output_bson}")
+
+            file_size = os.path.getsize(output_bson)
+            if file_size == 0:
+                raise Exception(f"常规导出失败: 文件为空 {output_bson} (大小: {file_size} 字节)")
+
+            print(f"✅ 常规导出成功: {output_bson} (大小: {file_size} 字节)")
 
         except Exception as e:
             print(f"❌ 常规导出集合 {db_name}.{collection_name} 失败: {e}")
@@ -339,7 +381,7 @@ class MyDump(Shell):
             if self.mongo.username and self.mongo.password:
                 auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin'
 
-            # 构建导出命令
+            # 构建导出命令 - 直接导出到dumps/{database}/
             export_cmd = (
                 f'{mongodump_exe} '
                 f'--host="{self.mongo.host}:{self.mongo.port}" '
@@ -351,8 +393,26 @@ class MyDump(Shell):
             # 执行导出
             self._exe_command(export_cmd)
 
-            print(f"✅ 数据库 {database} 常规导出完成")
-            return os.path.join(dump_root_path, database)
+            # 验证数据库目录是否存在且包含文件
+            db_dir = os.path.join(dump_root_path, database)
+            if not os.path.exists(db_dir):
+                raise Exception(f"数据库导出失败: 目录不存在 {db_dir}")
+
+            # 检查是否有有效的导出文件
+            has_files = False
+            for filename in os.listdir(db_dir):
+                if filename.endswith('.bson'):
+                    file_path = os.path.join(db_dir, filename)
+                    file_size = os.path.getsize(file_path)
+                    if file_size > 0:
+                        has_files = True
+                        print(f"✅ 数据库导出包含: {filename} (大小: {file_size} 字节)")
+
+            if not has_files:
+                raise Exception(f"数据库导出失败: 没有找到有效的导出文件")
+
+            # 数据库导出完成
+            return db_dir
 
         except Exception as e:
             print(f'❌ 常规导出数据库 {database} 失败: {e}')
@@ -430,26 +490,46 @@ class MyDump(Shell):
 
             # 计算每个分片的范围
             ranges = []
-            total_range = int(str(max_id), 16) - int(str(min_id), 16)
+
+            # 检查ObjectId类型
+            try:
+                min_str = str(min_id)
+                max_str = str(max_id)
+
+                # ObjectId字符串格式: 24个十六进制字符
+                if len(min_str) != 24 or len(max_str) != 24:
+                    return []
+
+                min_int = int(min_str, 16)
+                max_int = int(max_str, 16)
+                total_range = max_int - min_int
+
+                if total_range <= 0:
+                    return []
+
+            except ValueError as e:
+                print(f"⚠️ 分片调试: ObjectId转换失败: {e}")
+                return []
+
             shard_size = total_range // shard_count
 
             for i in range(shard_count):
                 start_offset = i * shard_size
                 end_offset = (i + 1) * shard_size if i < shard_count - 1 else total_range
 
-                start_id = ObjectId(hex(int(str(min_id), 16) + start_offset)[2:].zfill(24))
-                end_id = ObjectId(hex(int(str(min_id), 16) + end_offset)[2:].zfill(24))
+                start_hex = hex(min_int + start_offset)[2:].zfill(24)
+                end_hex = hex(min_int + end_offset)[2:].zfill(24)
 
-                # 最后一个分片包含所有剩余数据
+                start_id = ObjectId(start_hex)
                 if i == shard_count - 1:
-                    ranges.append(ObjectIdRange(start_id, None))
+                    end_id = None
                 else:
-                    ranges.append(ObjectIdRange(start_id, end_id))
+                    end_id = ObjectId(end_hex)
+                ranges.append(ObjectIdRange(start_id, end_id))
 
             return ranges
 
         except Exception as e:
-            print(f"⚠️ 获取分片范围失败: {e}")
             return []
 
     def get_shard_config(self) -> ShardConfig:

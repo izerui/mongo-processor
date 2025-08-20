@@ -61,12 +61,12 @@ class ObjectIdRange:
             return None
 
         query = {}
-        if self.start_id:
+        if self.start_id and self.end_id:
+            query['_id'] = {'$gte': self.start_id, '$lt': self.end_id}
+        elif self.start_id:
             query['_id'] = {'$gte': self.start_id}
-        if self.end_id:
-            if '_id' not in query:
-                query['_id'] = {}
-            query['_id']['$lt'] = self.end_id
+        elif self.end_id:
+            query['_id'] = {'$lt': self.end_id}
 
         return query
 
