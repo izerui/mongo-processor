@@ -162,7 +162,7 @@ class MyDump(Shell):
             dumps_dir = os.path.join(dump_root_path, db_name)
             os.makedirs(dumps_dir, exist_ok=True)
 
-            # 并发导出分片到临时目录（并发度=分片数）
+            # 并发导出分片（并发度=分片数）
             with ThreadPoolExecutor(max_workers=len(ranges)) as executor:
                 futures = []
                 for i, obj_range in enumerate(ranges):
