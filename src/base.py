@@ -43,7 +43,6 @@ class ShardConfig:
         self.min_documents_for_shard = 1000000  # 分片最小文档数
         self.default_shard_count = 4  # 默认分片数
         self.max_shard_count = 16  # 最大分片数
-        self.shard_concurrency = 4  # 分片并发数
 
 
 

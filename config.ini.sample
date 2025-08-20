@@ -16,8 +16,6 @@ minDocumentsForShard = 1000000
 defaultShardCount = 4
 # 最大分片数量（默认16）
 maxShardCount = 16
-# 分片导出并发数（默认4）
-shardConcurrency = 4
 
 [source]
 host=source-mongodb-host

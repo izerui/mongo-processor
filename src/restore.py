@@ -168,8 +168,8 @@ class MyRestore(Shell):
             password_append = f'--password="{self.mongo.password}"' if self.mongo.password else ''
             auth_append = f'--authenticationDatabase=admin' if self.mongo.username else ''
 
-            # 并发恢复所有分片
-            with ThreadPoolExecutor(max_workers=self.shard_config.shard_concurrency) as executor:
+            # 并发恢复所有分片（并发度=分片数）
+            with ThreadPoolExecutor(max_workers=shard_count) as executor:
                 futures = []
                 for i in range(shard_count):
                     shard_suffix = f"_shard_{i:03d}"

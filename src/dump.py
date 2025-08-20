@@ -84,7 +84,7 @@ class MyDump(Shell):
                 print(f"📦 开始导出 {len(small_collections)} 个非大集合...")
                 self._export_collections_with_exclude(database, small_collections, dump_root_path)
 
-            # 步骤2: 分片导出所有大集合到临时目录
+            # 步骤2: 分片导出所有大集合
             if large_collections:
                 print(f"🔄 开始分片导出 {len(large_collections)} 个大集合...")
                 with ThreadPoolExecutor(max_workers=self.numParallelCollections) as executor:
@@ -162,8 +162,8 @@ class MyDump(Shell):
             dumps_dir = os.path.join(dump_root_path, db_name)
             os.makedirs(dumps_dir, exist_ok=True)
 
-            # 并发导出分片到临时目录
-            with ThreadPoolExecutor(max_workers=self.shard_config.shard_concurrency) as executor:
+            # 并发导出分片到临时目录（并发度=分片数）
+            with ThreadPoolExecutor(max_workers=len(ranges)) as executor:
                 futures = []
                 for i, obj_range in enumerate(ranges):
                     future = executor.submit(
@@ -184,34 +184,6 @@ class MyDump(Shell):
             db_dir = os.path.join(dump_root_path, 'dumps', db_name)
             os.makedirs(db_dir, exist_ok=True)
 
-            # 收集所有分片文件并重命名移动到数据库目录
-            for i in range(len(ranges)):
-                part_suffix = f"_part{i+1:03d}"
-                part_dir_name = f"{collection_name}{part_suffix}"
-                part_dir = os.path.join(db_dir, part_dir_name)
-
-                if os.path.exists(part_dir):
-                    # 构建目标文件名
-                    target_bson = os.path.join(db_dir, f"{collection_name}{part_suffix}.bson")
-                    target_metadata = os.path.join(db_dir, f"{collection_name}{part_suffix}.metadata.json")
-
-                    # 源文件路径
-                    source_bson = os.path.join(part_dir, f"{collection_name}.bson")
-                    source_metadata = os.path.join(part_dir, f"{collection_name}.metadata.json")
-
-                    # 移动并重命名文件
-                    if os.path.exists(source_bson):
-                        import shutil
-                        shutil.move(source_bson, target_bson)
-                    if os.path.exists(source_metadata):
-                        shutil.move(source_metadata, target_metadata)
-
-                    # 清理空的分片目录
-                    try:
-                        os.rmdir(part_dir)
-                    except:
-                        pass
-
             # 保存分片元数据到数据库目录
             self._save_shard_metadata(db_dir, db_name, collection_name, ranges)
 
@@ -222,14 +194,13 @@ class MyDump(Shell):
             raise
 
     def _export_single_shard(self, db_name: str, collection_name: str,
-                           output_dir: str, shard_idx: int, obj_range: ObjectIdRange):
+                             dump_root_path: str, shard_idx: int, obj_range: ObjectIdRange):
         """导出单个分片到指定目录"""
-        """导出单个分片到分片目录"""
         try:
             # 构建分片目录名和文件名
-            part_suffix = f"_part{shard_idx+1:03d}"
-            part_dir_name = f"{collection_name}{part_suffix}"
-            part_dir = os.path.join(output_dir, db_name, part_dir_name)
+            part_suffix = f"_part{shard_idx + 1:03d}"
+            collection_dir_name = f"{collection_name}{part_suffix}"
+            part_dir = os.path.join(dump_root_path, db_name, collection_dir_name)
             os.makedirs(part_dir, exist_ok=True)
 
             # 构建查询条件
@@ -270,8 +241,8 @@ class MyDump(Shell):
             self._exe_command(export_cmd)
 
             # 验证分片目录中的导出结果
-            collection_bson = os.path.join(part_dir, f"{collection_name}.bson")
-            collection_metadata = os.path.join(part_dir, f"{collection_name}.metadata.json")
+            collection_bson = os.path.join(part_dir, db_name, f"{collection_name}.bson")
+            collection_metadata = os.path.join(part_dir, db_name, f"{collection_name}.metadata.json")
 
             # 验证文件是否存在且不为空
             if not os.path.exists(collection_bson):
@@ -282,13 +253,22 @@ class MyDump(Shell):
                     print(f"📁 分片目录内容: {files}")
                 raise Exception(f"分片导出失败: 文件不存在 {collection_bson}")
 
-            file_size = os.path.getsize(collection_bson)
-            if file_size == 0:
-                print(f"❌ 分片导出失败: 文件为空 {collection_bson} (大小: {file_size} 字节)")
-                raise Exception(f"分片导出失败: 文件为空 {collection_bson} (大小: {file_size} 字节)")
+            # 构建目标路径（移动到外层 os.path.join(dump_root_path, db_name)）
+            target_dir = os.path.join(dump_root_path, db_name)
+            target_bson = os.path.join(target_dir, f"{collection_name}{part_suffix}.bson")
+            target_metadata = os.path.join(target_dir, f"{collection_name}{part_suffix}.metadata.json")
 
-            # 分片文件已导出到分片目录，将在外层统一处理重命名和移动
-            print(f"✅ 分片 {shard_idx + 1} 导出完成到: {part_dir}")
+            # 重命名并移动文件
+            if os.path.exists(collection_bson):
+                shutil.move(collection_bson, target_bson)
+            if os.path.exists(collection_metadata):
+                shutil.move(collection_metadata, target_metadata)
+
+            # 删除 part_dir
+            if os.path.exists(part_dir):
+                shutil.rmtree(part_dir)
+
+            print(f"✅ 分片 {shard_idx + 1} 导出完成，文件已移动到: {target_dir}")
 
         except Exception as e:
             print(f"❌ 导出分片 {shard_idx + 1} 失败: {e}")
@@ -386,7 +366,7 @@ class MyDump(Shell):
 
             # 获取所有collection名称，排除系统collection
             collections = [name for name in db.list_collection_names()
-                         if not name.startswith('system.')]
+                           if not name.startswith('system.')]
 
             return collections
 
@@ -453,8 +433,12 @@ class MyDump(Shell):
             # 获取文档数量
             doc_count = collection.estimated_document_count()
 
-            # 如果文档数量超过阈值，则分片
-            return doc_count >= self.shard_config.min_documents_for_shard
+            # 只有大集合才显示条目数
+            is_large = doc_count >= self.shard_config.min_documents_for_shard
+            if is_large:
+                print(f"📊 大集合 {database}.{collection_name}: {doc_count:,} 条记录")
+
+            return is_large
 
         except Exception as e:
             print(f"⚠️ 判断collection {database}.{collection_name} 分片需求失败: {e}")
@@ -482,13 +466,17 @@ class MyDump(Shell):
                 self.shard_config.max_shard_count
             ))
 
+            print(
+                f"📊 分片计算: {doc_count:,} 条记录 -> {needed_shards} 个分片 (最大: {self.shard_config.max_shard_count})")
+
             return needed_shards
 
         except Exception as e:
             print(f"⚠️ 计算分片数量失败: {e}")
             return self.shard_config.default_shard_count
 
-    def _get_collection_objectid_ranges(self, db_name: str, collection_name: str, shard_count: int) -> List[ObjectIdRange]:
+    def _get_collection_objectid_ranges(self, db_name: str, collection_name: str, shard_count: int) -> List[
+        ObjectIdRange]:
         """获取collection的ObjectId分片范围"""
         try:
             if not self._connect() or shard_count <= 1:

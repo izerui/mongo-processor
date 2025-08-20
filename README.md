@@ -62,8 +62,6 @@ minDocumentsForShard = 1000000
 defaultShardCount = 4
 # 最大分片数量（默认16）
 maxShardCount = 16
-# 分片导出并发数（默认4）
-shardConcurrency = 4
 
 
 ## 分片功能
@@ -102,8 +100,7 @@ defaultShardCount = 4
 # 最大分片数量（防止过度分片）
 maxShardCount = 16
 
-# 分片导出并发数（建议不超过CPU核心数）
-shardConcurrency = 4
+
 ```
 
 ## 目录结构
@@ -198,8 +195,7 @@ defaultShardCount = 8
 # 限制最大分片数量
 maxShardCount = 32
 
-# 提高分片并发数（适用于高性能服务器）
-shardConcurrency = 8
+# 分片数即并发度（适用于高性能服务器）
 ```
 
 ### 性能优化建议
@@ -211,7 +207,6 @@ shardConcurrency = 8
 - 超大collection（> 2000万文档）：8-16个分片
 
 **并发配置：**
-- `shardConcurrency`：建议设置为CPU核心数的50%-75%
 - `numParallelCollections`：控制同时处理的collection数
 - `numInsertionWorkersPerCollection`：影响导入性能
 

@@ -99,14 +99,12 @@ def main():
     min_documents_for_shard = config.getint('global', 'minDocumentsForShard', fallback=1000000)
     default_shard_count = config.getint('global', 'defaultShardCount', fallback=4)
     max_shard_count = config.getint('global', 'maxShardCount', fallback=16)
-    shard_concurrency = config.getint('global', 'shardConcurrency', fallback=4)
 
     # 创建分片配置
     shard_config = ShardConfig()
     shard_config.min_documents_for_shard = min_documents_for_shard
     shard_config.default_shard_count = default_shard_count
     shard_config.max_shard_count = max_shard_count
-    shard_config.shard_concurrency = shard_concurrency
 
     dump_folder = Path(__file__).parent.parent / 'dumps'
 
