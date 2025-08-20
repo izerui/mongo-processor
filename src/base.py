@@ -1,6 +1,7 @@
 import os
 import platform
 from subprocess import Popen, PIPE, STDOUT
+from typing import Optional, Dict, Any
 
 
 class Shell(object):
@@ -33,6 +34,44 @@ class Mongo:
         self.port = db_port
         self.username = db_user
         self.password = db_pass
+
+
+class ShardConfig:
+    """分片配置类"""
+
+    def __init__(self):
+        self.min_documents_for_shard = 1000000  # 分片最小文档数
+        self.default_shard_count = 4  # 默认分片数
+        self.max_shard_count = 16  # 最大分片数
+        self.shard_concurrency = 4  # 分片并发数
+
+
+
+
+class ObjectIdRange:
+    """ObjectId范围类"""
+
+    def __init__(self, start_id=None, end_id=None):
+        self.start_id = start_id
+        self.end_id = end_id
+
+    def to_query(self) -> Optional[Dict[str, Any]]:
+        """转换为MongoDB查询条件"""
+        if not self.start_id and not self.end_id:
+            return None
+
+        query = {}
+        if self.start_id:
+            query['_id'] = {'$gte': self.start_id}
+        if self.end_id:
+            if '_id' not in query:
+                query['_id'] = {}
+            query['_id']['$lt'] = self.end_id
+
+        return query
+
+    def __str__(self):
+        return f"ObjectIdRange({self.start_id}, {self.end_id})"
 
 
 # 获取当前脚本目录（src目录）

@@ -9,3 +9,4 @@ config.ini
 # uv
 .venv
 databases/
+k8s/aws.yaml

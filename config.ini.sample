@@ -7,6 +7,17 @@ numParallelCollections = 16
 # 每个集合的插入工作线程数
 numInsertionWorkersPerCollection = 8
 
+# 分片相关配置
+# 是否启用分片功能（默认true）
+enableSharding = true
+# 触发分片的最小文档数量（默认100万）
+minDocumentsForShard = 1000000
+# 默认分片数量（默认4）
+defaultShardCount = 4
+# 最大分片数量（默认16）
+maxShardCount = 16
+# 分片导出并发数（默认4）
+shardConcurrency = 4
 
 [source]
 host=source-mongodb-host

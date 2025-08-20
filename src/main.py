@@ -6,10 +6,11 @@ import sys
 import time
 from configparser import ConfigParser
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 
 from dump import MyDump, Mongo
 from restore import MyRestore
+from base import ShardConfig
 from index import IndexManager, create_mongo_client
 
 
@@ -25,7 +26,8 @@ def cleanup_dump_folder(dump_folder: Path) -> None:
 
 
 def process_single_database(db_name: str, source: Mongo, target: Mongo,
-                            numParallelCollections: int, numInsertionWorkersPerCollection: int, dump_folder: Path) -> \
+                            numParallelCollections: int, numInsertionWorkersPerCollection: int, dump_folder: Path,
+                            enable_sharding: bool = True, shard_config: Optional[ShardConfig] = None) -> \
 Tuple[str, bool, float, float, float]:
     """
     处理单个数据库的导出、导入和清理
@@ -35,6 +37,8 @@ Tuple[str, bool, float, float, float]:
     :param numParallelCollections: 并发数
     :param numInsertionWorkersPerCollection: 每个集合的插入工作线程数
     :param dump_folder: 导出目录
+    :param enable_sharding: 是否启用分片
+    :param shard_config: 分片配置
     :return: (数据库名, 是否成功, 总耗时, 导出时间, 导入时间)
     """
     start_time = time.time()
@@ -44,23 +48,17 @@ Tuple[str, bool, float, float, float]:
     try:
         # 导出
         export_start_time = time.time()
-        mydump = MyDump(source, numParallelCollections)
-        db_dump_dir = mydump.export_db(database=db_name, dump_root_path=str(dump_folder))
+        mydump = MyDump(source, numParallelCollections, enable_sharding, shard_config)
+        mydump.export_db(database=db_name, dump_root_path=str(dump_folder))
         export_time = time.time() - export_start_time
         print(f' ✅ 成功从{source.host}导出: {db_name} (耗时: {export_time:.2f}秒)')
 
         # 导入
         import_start_time = time.time()
-        myrestore = MyRestore(target, numParallelCollections, numInsertionWorkersPerCollection)
+        myrestore = MyRestore(target, numParallelCollections, numInsertionWorkersPerCollection, enable_sharding, shard_config)
         myrestore.restore_db(database=db_name, dump_root_path=str(dump_folder))
         import_time = time.time() - import_start_time
         print(f' ✅ 成功导入{target.host}: {db_name} (耗时: {import_time:.2f}秒)')
-
-        # 删除当前数据库的导出目录
-        db_export_dir = os.path.join(str(dump_folder), db_name)
-        print(f' ✅ 删除临时文件缓存: {db_export_dir}')
-        if os.path.exists(db_export_dir):
-            shutil.rmtree(db_export_dir)
 
         total_time = time.time() - start_time
         return db_name, True, total_time, export_time, import_time
@@ -96,6 +94,20 @@ def main():
     numParallelCollections = config.getint('global', 'numParallelCollections')
     numInsertionWorkersPerCollection = config.getint('global', 'numInsertionWorkersPerCollection')
 
+    # 分片相关配置
+    enable_sharding = config.getboolean('global', 'enableSharding', fallback=True)
+    min_documents_for_shard = config.getint('global', 'minDocumentsForShard', fallback=1000000)
+    default_shard_count = config.getint('global', 'defaultShardCount', fallback=4)
+    max_shard_count = config.getint('global', 'maxShardCount', fallback=16)
+    shard_concurrency = config.getint('global', 'shardConcurrency', fallback=4)
+
+    # 创建分片配置
+    shard_config = ShardConfig()
+    shard_config.min_documents_for_shard = min_documents_for_shard
+    shard_config.default_shard_count = default_shard_count
+    shard_config.max_shard_count = max_shard_count
+    shard_config.shard_concurrency = shard_concurrency
+
     dump_folder = Path(__file__).parent.parent / 'dumps'
 
     # 清理历史导出目录
@@ -103,6 +115,7 @@ def main():
     dump_folder.mkdir(exist_ok=True)
 
     print(f"⚙️ 导出配置: 单库并发数={numParallelCollections}, 线程池并发数={maxThreads}")
+    print(f"🔄 分片配置: 启用分片={enable_sharding}, 分片阈值={min_documents_for_shard:,}条, 最大分片数={max_shard_count}")
     print(f"📊 待处理数据库: {len(databases)}个")
 
     total_start_time = time.time()
@@ -115,7 +128,8 @@ def main():
         # 提交所有数据库处理任务
         future_to_db = {
             pool.submit(process_single_database, db.strip(), source, target,
-                        numParallelCollections, numInsertionWorkersPerCollection, dump_folder): db.strip()
+                        numParallelCollections, numInsertionWorkersPerCollection, dump_folder,
+                        enable_sharding, shard_config): db.strip()
             for db in databases
         }
 
@@ -195,15 +209,15 @@ def main():
             source_client = create_mongo_client(
                 source.host,
                 int(source.port),
-                source.username if source.username else None,
-                source.password if source.password else None
+                source.username or "",
+                source.password or ""
             )
 
             target_client = create_mongo_client(
                 target.host,
                 int(target.port),
-                target.username if target.username else None,
-                target.password if target.password else None
+                target.username or "",
+                target.password or ""
             )
 
             # 创建索引管理器

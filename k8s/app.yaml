@@ -60,7 +60,12 @@ data:
   config.ini: |
     [global]
     databases=bom_migration_tmp
-    parallel=8
+    # 线程池并发配置（同时处理的数据库数量）
+    maxThreads = 4
+    # 单库导出导入并行处理collection的并发数
+    numParallelCollections = 8
+    # 每个集合的插入工作线程数
+    numInsertionWorkersPerCollection = 8
     
     [source]
     host=xxx

@@ -53,11 +53,62 @@ numParallelCollections = 16
 # 每个集合的插入工作线程数
 numInsertionWorkersPerCollection = 8
 
+# 分片相关配置
+# 是否启用分片功能（默认true）
+enableSharding = true
+# 触发分片的最小文档数量（默认100万）
+minDocumentsForShard = 1000000
+# 默认分片数量（默认4）
+defaultShardCount = 4
+# 最大分片数量（默认16）
+maxShardCount = 16
+# 分片导出并发数（默认4）
+shardConcurrency = 4
+
+
+## 分片功能
+
+### ObjectId 分片导出
+
+本工具支持对大型collection进行ObjectId分片导出，提供以下特性：
+
+**自动分片检测：**
+- 自动检测超过阈值的collection（默认100万文档）
+- 智能计算最优分片数量
+- 支持手动配置分片参数
+
+**并行分片导出：**
+- 按ObjectId时间戳范围分片
+- 每个分片独立并行导出
+- 自动生成分片文件命名
+
+**分片数据管理：**
+- 分片文件命名格式：`collection_shard_001.bson`
+- 自动生成分片元数据文件：`collection_shards.json`
+- 支持导入时自动识别和合并分片
+
+### 分片配置说明
+
+```ini
+# 是否启用分片功能
+enableSharding = true
+
+# 触发分片的最小文档数量（默认100万）
+minDocumentsForShard = 1000000
+
+# 默认分片数量（建议2-8个）
+defaultShardCount = 4
+
+# 最大分片数量（防止过度分片）
+maxShardCount = 16
+
+# 分片导出并发数（建议不超过CPU核心数）
+shardConcurrency = 4
+```
 
 ## 目录结构
 
-导出后的目录结构如下（mongodump默认行为）：
-
+### 常规导出结构：
 ```
 dumps/
 ├── 数据库名1/
@@ -65,16 +116,30 @@ dumps/
 │   ├── collection1.metadata.json.gz
 │   ├── collection2.bson.gz
 │   └── collection2.metadata.json.gz
-├── 数据库名2/
-│   ├── collection3.bson.gz
-│   ├── collection3.metadata.json.gz
-│   └── ...
+```
+
+### 分片导出结构：
+```
+dumps/
+├── 数据库名1/
+│   ├── small_collection.bson.gz          # 小collection（常规导出）
+│   ├── small_collection.metadata.json.gz
+│   ├── large_collection_shard_000.bson   # 大collection分片文件
+│   ├── large_collection_shard_000.metadata.json
+│   ├── large_collection_shard_001.bson
+│   ├── large_collection_shard_001.metadata.json
+│   ├── large_collection_shard_002.bson
+│   ├── large_collection_shard_002.metadata.json
+│   ├── large_collection_shard_003.bson
+│   ├── large_collection_shard_003.metadata.json
+│   └── large_collection_shards.json      # 分片元数据文件
 ```
 
 **重要说明：**
 - mongodump会在`--out`指定的目录下自动创建数据库名子目录
-- 因此最终路径为：`dumps/数据库名/文件`
-- 每个数据库作为一个整体导出，所有集合的文件直接放在数据库目录下
+- 分片文件使用序号命名：`collection_shard_000`, `collection_shard_001` 等
+- 分片元数据文件包含分片范围和恢复信息
+- 导入时会自动识别分片并合并到目标collection
 
 
 [source]
@@ -101,6 +166,59 @@ uv run python main.py
 ```bash
 python main.py
 ```
+
+### 测试分片功能
+```bash
+# 运行分片功能测试
+uv run python src/test_shard.py
+```
+
+## 分片功能使用示例
+
+### 基本用法
+分片功能默认启用，无需额外配置。工具会自动：
+
+1. **检测大型collection**：文档数量超过阈值时自动启用分片
+2. **计算最优分片数**：根据数据量智能确定分片数量
+3. **并行导出分片**：多个分片同时导出，提升性能
+4. **自动合并导入**：导入时识别分片文件并自动合并
+
+### 高级配置
+```ini
+[global]
+# 关闭分片功能（使用传统导出）
+enableSharding = false
+
+# 调整分片阈值（50万文档触发分片）
+minDocumentsForShard = 500000
+
+# 设置固定分片数量
+defaultShardCount = 8
+
+# 限制最大分片数量
+maxShardCount = 32
+
+# 提高分片并发数（适用于高性能服务器）
+shardConcurrency = 8
+```
+
+### 性能优化建议
+
+**分片数量选择：**
+- 小型collection（< 100万文档）：不分片
+- 中型collection（100万-500万文档）：2-4个分片
+- 大型collection（500万-2000万文档）：4-8个分片
+- 超大collection（> 2000万文档）：8-16个分片
+
+**并发配置：**
+- `shardConcurrency`：建议设置为CPU核心数的50%-75%
+- `numParallelCollections`：控制同时处理的collection数
+- `numInsertionWorkersPerCollection`：影响导入性能
+
+**最佳实践：**
+- 在非业务高峰期进行分片导出
+- 监控磁盘I/O和网络带宽使用情况
+- 大型数据库建议先测试小部分数据
 
 ## 开发
 
