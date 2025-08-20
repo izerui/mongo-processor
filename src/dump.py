@@ -82,7 +82,7 @@ class MyDump(Shell):
             # 步骤1: 使用exclude参数导出所有非大集合
             if small_collections:
                 print(f"📦 开始导出 {len(small_collections)} 个非大集合...")
-                self._export_collections_with_exclude(database, small_collections, dump_root_path)
+                self._export_collections_with_exclude(database, large_collections, dump_root_path)
 
             # 步骤2: 分片导出所有大集合
             if large_collections:
@@ -116,16 +116,14 @@ class MyDump(Shell):
     def _export_collections_with_exclude(self, database: str, exclude_collections: List[str], dump_root_path: str):
         """使用exclude参数导出除指定集合外的所有集合"""
         try:
-            if not exclude_collections:
-                return
-
             # 构建认证参数
             auth_append = ''
             if self.mongo.username and self.mongo.password:
                 auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin'
-
-            # 构建exclude参数
-            exclude_params = ' '.join([f'--excludeCollection={col}' for col in exclude_collections])
+                # 构建exclude参数
+                exclude_params = ''
+                if exclude_collections and len(exclude_collections) > 0:
+                    exclude_params = ' '.join([f'--excludeCollection={col}' for col in exclude_collections])
 
             # 构建导出命令 - 导出整个数据库但排除大集合
             export_cmd = (
