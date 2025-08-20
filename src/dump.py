@@ -175,7 +175,6 @@ class MyDump(Shell):
                 for future in futures:
                     try:
                         future.result()
-                        print(f"✅ 分片导出完成")
                     except Exception as e:
                         print(f"❌ 分片导出失败: {e}")
                         raise
@@ -185,7 +184,7 @@ class MyDump(Shell):
             os.makedirs(db_dir, exist_ok=True)
 
             # 保存分片元数据到数据库目录
-            self._save_shard_metadata(db_dir, db_name, collection_name, ranges)
+            # self._save_shard_metadata(db_dir, db_name, collection_name, ranges)
 
             print(f"🎉 集合 {db_name}.{collection_name} 分片导出完成，共 {len(ranges)} 个分片")
 
