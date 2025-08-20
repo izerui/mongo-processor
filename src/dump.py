@@ -152,28 +152,28 @@ class MyDump(Shell):
             print(f'❌ 导出非大集合失败: {e}')
             raise
 
-    def _export_collection_shards(self, database: str, collection_name: str, dump_root_path: str, exact_count: int = None):
+    def _export_collection_shards(self, db_name: str, collection_name: str, dump_root_path: str, exact_count: int = None):
         """分片导出单个collection，使用临时目录和重命名机制"""
         try:
             # 计算分片数量（使用精确计数）
             if exact_count is None:
                 if not self._connect():
-                    return self._export_collection_normal(database, collection_name, dump_root_path)
-                db = self.client[database]
+                    return self._export_collection_normal(db_name, collection_name, dump_root_path)
+                db = self.client[db_name]
                 exact_count = db[collection_name].count_documents({})
 
-            shard_count = self._calculate_optimal_shard_count(database, collection_name, exact_count)
+            shard_count = self._calculate_optimal_shard_count(db_name, collection_name, exact_count)
 
             # 获取分片范围
-            ranges = self._get_collection_objectid_ranges(database, collection_name, shard_count, exact_count)
+            ranges = self._get_collection_objectid_ranges(db_name, collection_name, shard_count, exact_count)
             if not ranges:
                 print(f"⚠️ 无法获取集合 {db_name}.{collection_name} 的分片范围，使用常规导出")
                 return self._export_collection_normal(db_name, collection_name, dump_root_path)
 
-            print(f"🔄 开始分片导出 {database}.{collection_name}，分片数: {len(ranges)}，文档数: {exact_count:,}")
+            print(f"🔄 开始分片导出 {db_name}.{collection_name}，分片数: {len(ranges)}，文档数: {exact_count:,}")
 
             # 创建分片导出目录结构: dumps/{database}/{collection}_partXXX/
-            dumps_dir = os.path.join(dump_root_path, database)
+            dumps_dir = os.path.join(dump_root_path, db_name)
             os.makedirs(dumps_dir, exist_ok=True)
 
             # 并发导出分片（并发度=分片数）
@@ -182,7 +182,7 @@ class MyDump(Shell):
                 for i, obj_range in enumerate(ranges):
                     future = executor.submit(
                         self._export_single_shard,
-                        database, collection_name, dump_root_path, i, obj_range
+                        db_name, collection_name, dump_root_path, i, obj_range
                     )
                     futures.append(future)
 
@@ -194,7 +194,7 @@ class MyDump(Shell):
                         raise
 
             # 数据库目录
-            db_dir = os.path.join(dump_root_path, database)
+            db_dir = os.path.join(dump_root_path, db_name)
             os.makedirs(db_dir, exist_ok=True)
 
             # 保存分片元数据到数据库目录
@@ -284,28 +284,28 @@ class MyDump(Shell):
             # 修改分片元数据，将集合名改为当前分片的文件名
             part_suffix = f"_part{shard_idx + 1:03d}"
             shard_collection_name = f"{collection_name}{part_suffix}"
-            metadata_file = os.path.join(target_dir, f"{shard_collection_name}.metadata.json")
+            # metadata_file = os.path.join(target_dir, f"{shard_collection_name}.metadata.json")
 
-            if os.path.exists(metadata_file):
-                try:
-                    with open(metadata_file, 'r', encoding='utf-8') as f:
-                        metadata = json.load(f)
-
-                    # 修改集合名称为分片文件名
-                    metadata['collectionName'] = shard_collection_name
-
-                    # 修改indexes中的ns字段
-                    if 'indexes' in metadata:
-                        for index in metadata['indexes']:
-                            if 'ns' in index:
-                                index['ns'] = f"{db_name}.{shard_collection_name}"
-
-                    with open(metadata_file, 'w', encoding='utf-8') as f:
-                        json.dump(metadata, f, indent=2, ensure_ascii=False)
-
-                    print(f"📝 已修改分片元数据: {metadata_file}，集合名改为: {shard_collection_name}")
-                except Exception as e:
-                    print(f"⚠️ 修改分片元数据失败: {e}")
+            # if os.path.exists(metadata_file):
+            #     try:
+            #         with open(metadata_file, 'r', encoding='utf-8') as f:
+            #             metadata = json.load(f)
+            #
+            #         # 修改集合名称为分片文件名
+            #         metadata['collectionName'] = shard_collection_name
+            #
+            #         # 修改indexes中的ns字段
+            #         if 'indexes' in metadata:
+            #             for index in metadata['indexes']:
+            #                 if 'ns' in index:
+            #                     index['ns'] = f"{db_name}.{shard_collection_name}"
+            #
+            #         with open(metadata_file, 'w', encoding='utf-8') as f:
+            #             json.dump(metadata, f, indent=2, ensure_ascii=False)
+            #
+            #         print(f"📝 已修改分片元数据: {metadata_file}，集合名改为: {shard_collection_name}")
+            #     except Exception as e:
+            #         print(f"⚠️ 修改分片元数据失败: {e}")
 
             print(f"✅ 分片 {shard_idx + 1} 导出完成，文件已移动到: {target_dir}")
 
