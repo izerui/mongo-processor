@@ -69,7 +69,7 @@ class MyRestore(Shell):
 
     def merge_sharded_collections(self, database: str, original_collection_name: str) -> None:
         """
-        通过聚合管道将分片的多个集合合并回原始集合名
+        高性能合并分片集合，使用批量插入替代聚合管道
         :param database: 数据库名
         :param original_collection_name: 原始集合名（不含分片后缀）
         """
@@ -101,39 +101,56 @@ class MyRestore(Shell):
                 db[target_collection].drop()
                 print(f"🗑️ 已删除现有集合: {target_collection}")
 
-            # 使用聚合管道合并所有分片集合
-            pipeline = []
+            # 高性能批量插入，跳过聚合管道
+            total_count = 0
+            batch_size = 50000  # 进一步增大批量大小
 
-            # 添加所有分片集合的$unionWith阶段
-            for i, shard_collection in enumerate(shard_collections):
-                if i == 0:
-                    # 第一个集合作为主集合
-                    pipeline.append({"$match": {}})
-                else:
-                    # 后续集合使用$unionWith合并
-                    pipeline.append({"$unionWith": {"coll": shard_collection}})
+            # 临时禁用索引以提升插入性能
+            try:
+                db[target_collection].drop_indexes()
+                print("🚀 已临时禁用索引以提升插入性能")
+            except:
+                pass
 
-            # 执行聚合管道
-            result = db[shard_collections[0]].aggregate(pipeline, allowDiskUse=True)
+            for shard_collection in shard_collections:
+                print(f"🔄 正在合并集合: {shard_collection}")
 
-            # 将结果插入到目标集合
-            bulk_ops = []
-            count = 0
+                # 获取集合文档总数
+                doc_count = db[shard_collection].estimated_document_count()
+                print(f"📄 集合 {shard_collection} 包含 {doc_count} 条文档")
 
-            for doc in result:
-                bulk_ops.append(doc)
-                count += 1
+                # 使用游标批量处理
+                cursor = db[shard_collection].find({}, batch_size=batch_size)
 
-                # 批量插入，每1000条执行一次
-                if len(bulk_ops) >= 10000:
-                    db[target_collection].insert_many(bulk_ops, ordered=False)
-                    bulk_ops = []
+                bulk_docs = []
+                processed = 0
 
-            # 插入剩余文档
-            if bulk_ops:
-                db[target_collection].insert_many(bulk_ops, ordered=False)
+                for doc in cursor:
+                    bulk_docs.append(doc)
+                    processed += 1
 
-            print(f"✅ 合并完成: {len(shard_collections)} 个分片集合 -> {target_collection}，共 {count} 条文档")
+                    # 批量插入
+                    if len(bulk_docs) >= batch_size:
+                        db[target_collection].insert_many(bulk_docs, ordered=False)
+                        bulk_docs = []
+                        if processed % 100000 == 0:
+                            print(f"⏳ 已处理 {processed:,}/{doc_count:,} 条文档 ({processed/doc_count*100:.1f}%)")
+
+                # 插入剩余文档
+                if bulk_docs:
+                    db[target_collection].insert_many(bulk_docs, ordered=False)
+
+                total_count += processed
+                print(f"✅ 集合 {shard_collection} 合并完成，共 {processed} 条文档")
+
+            # 重建索引
+            try:
+                db[target_collection].create_index([("_id", 1)])
+                print("🔧 已重建 _id 索引")
+            except Exception as e:
+                print(f"⚠️ 重建索引失败: {e}")
+
+            print(f"✅ 合并完成: {len(shard_collections)} 个分片集合 -> {target_collection}，共 {total_count:,} 条文档")
 
             # 自动删除分片集合
             for shard_collection in shard_collections:
