@@ -63,6 +63,9 @@ defaultShardCount = 4
 # 最大分片数量（默认16）
 maxShardCount = 16
 
+# 跳过导出，直接导入已有数据（默认false）
+skipExport = false
+
 
 ## 分片功能
 
@@ -172,6 +175,35 @@ uv run python src/test_shard.py
 
 ## 分片功能使用示例
 
+### 跳过导出模式
+
+支持跳过导出步骤，直接使用已有数据进行导入：
+
+**配置文件方式：**
+```ini
+[global]
+skipExport = true
+```
+
+**命令行参数方式：**
+```bash
+# 跳过导出，直接导入
+python main.py --skip-export
+
+# 使用指定配置文件
+python main.py --config custom-config.ini --skip-export
+```
+
+**使用场景：**
+- 已有历史导出数据，需要重新导入
+- 导出和导入分步执行，避免重复导出
+- 调试导入过程，跳过耗时的导出阶段
+
+**注意事项：**
+- 跳过导出时不会清理历史导出目录
+- 确保导出目录中的数据完整且有效
+- 跳过导出模式会忽略源数据库连接配置
+
 ### 基本用法
 分片功能默认启用，无需额外配置。工具会自动：
 
@@ -204,7 +236,7 @@ maxShardCount = 32
 - 小型collection（< 100万文档）：不分片
 - 中型collection（100万-500万文档）：2-4个分片
 - 大型collection（500万-2000万文档）：4-8个分片
-- 超大collection（> 2000万文档）：8-16个分片
+- 大型collection（> 2000万文档）：8-16个分片
 
 **并发配置：**
 - `numParallelCollections`：控制同时处理的collection数

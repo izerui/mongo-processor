@@ -7,6 +7,9 @@ numParallelCollections = 16
 # 每个集合的插入工作线程数
 numInsertionWorkersPerCollection = 8
 
+# 跳过导出，直接导入已有数据（默认false）
+skipExport = false
+
 # 分片相关配置
 # 是否启用分片功能（默认true）
 enableSharding = true

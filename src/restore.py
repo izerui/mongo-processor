@@ -50,8 +50,8 @@ class MyRestore(Shell):
                 f'--numInsertionWorkersPerCollection={self.num_insertion_workers} '
                 f'--noIndexRestore '
                 f'--drop '
-                f'--gzip '
-                f'--dir="{dump_root_path}"'
+                f'--db={database} '
+                f'--dir="{os.path.join(dump_root_path, database)}"'
             )
 
             # 执行导入

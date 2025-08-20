@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import concurrent.futures
 import os
 import shutil
@@ -27,7 +28,8 @@ def cleanup_dump_folder(dump_folder: Path) -> None:
 
 def process_single_database(db_name: str, source: Mongo, target: Mongo,
                             numParallelCollections: int, numInsertionWorkersPerCollection: int, dump_folder: Path,
-                            enable_sharding: bool = True, shard_config: Optional[ShardConfig] = None) -> \
+                            enable_sharding: bool = True, shard_config: Optional[ShardConfig] = None,
+                            skip_export: bool = False) -> \
 Tuple[str, bool, float, float, float]:
     """
     处理单个数据库的导出、导入和清理
@@ -39,6 +41,7 @@ Tuple[str, bool, float, float, float]:
     :param dump_folder: 导出目录
     :param enable_sharding: 是否启用分片
     :param shard_config: 分片配置
+    :param skip_export: 是否跳过导出步骤
     :return: (数据库名, 是否成功, 总耗时, 导出时间, 导入时间)
     """
     start_time = time.time()
@@ -48,14 +51,18 @@ Tuple[str, bool, float, float, float]:
     try:
         # 导出
         export_start_time = time.time()
-        mydump = MyDump(source, numParallelCollections, enable_sharding, shard_config)
-        mydump.export_db(database=db_name, dump_root_path=str(dump_folder))
-        export_time = time.time() - export_start_time
-        print(f' ✅ 成功从{source.host}导出: {db_name} (耗时: {export_time:.2f}秒)')
+        if not skip_export:
+            mydump = MyDump(source, numParallelCollections, enable_sharding, shard_config)
+            mydump.export_db(database=db_name, dump_root_path=str(dump_folder))
+            export_time = time.time() - export_start_time
+            print(f' ✅ 成功从{source.host}导出: {db_name} (耗时: {export_time:.2f}秒)')
+        else:
+            export_time = 0.0
+            print(f' ⏭️  跳过导出: {db_name} (使用已有导出数据)')
 
         # 导入
         import_start_time = time.time()
-        myrestore = MyRestore(target, numParallelCollections, numInsertionWorkersPerCollection, enable_sharding, shard_config)
+        myrestore = MyRestore(target, numParallelCollections, numInsertionWorkersPerCollection)
         myrestore.restore_db(database=db_name, dump_root_path=str(dump_folder))
         import_time = time.time() - import_start_time
         print(f' ✅ 成功导入{target.host}: {db_name} (耗时: {import_time:.2f}秒)')
@@ -71,8 +78,17 @@ Tuple[str, bool, float, float, float]:
 
 def main():
     """主函数 - 使用线程池并发处理"""
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='MongoDB数据迁移工具')
+    parser.add_argument('--skip-export', action='store_true',
+                       help='跳过导出步骤，直接使用已有导出数据进行导入')
+    parser.add_argument('--config', type=str, default='config.ini',
+                       help='配置文件路径 (默认: config.ini)')
+
+    args = parser.parse_args()
+
     config = ConfigParser()
-    config_path = Path(__file__).parent.parent / 'config.ini'
+    config_path = Path(__file__).parent.parent / args.config
     config.read(config_path)
 
     source = Mongo(
@@ -93,6 +109,8 @@ def main():
     maxThreads = config.getint('global', 'maxThreads', fallback=4)  # 新增配置项
     numParallelCollections = config.getint('global', 'numParallelCollections')
     numInsertionWorkersPerCollection = config.getint('global', 'numInsertionWorkersPerCollection')
+    # 命令行参数优先级高于配置文件
+    skip_export = args.skip_export or config.getboolean('global', 'skipExport', fallback=False)
 
     # 分片相关配置
     enable_sharding = config.getboolean('global', 'enableSharding', fallback=True)
@@ -108,11 +126,14 @@ def main():
 
     dump_folder = Path(__file__).parent.parent / 'dumps'
 
-    # 清理历史导出目录
-    cleanup_dump_folder(dump_folder)
-    dump_folder.mkdir(exist_ok=True)
+    # 清理历史导出目录（仅在需要导出时）
+    if not skip_export:
+        cleanup_dump_folder(dump_folder)
+        dump_folder.mkdir(exist_ok=True)
+    else:
+        print("⚠️  跳过导出模式，保留现有导出数据")
 
-    print(f"⚙️ 导出配置: 单库并发数={numParallelCollections}, 线程池并发数={maxThreads}")
+    print(f"⚙️ 导出配置: 单库并发数={numParallelCollections}, 线程池并发数={maxThreads}, 跳过导出={skip_export}")
     print(f"🔄 分片配置: 启用分片={enable_sharding}, 分片阈值={min_documents_for_shard:,}条, 最大分片数={max_shard_count}")
     print(f"📊 待处理数据库: {len(databases)}个")
 
@@ -127,7 +148,7 @@ def main():
         future_to_db = {
             pool.submit(process_single_database, db.strip(), source, target,
                         numParallelCollections, numInsertionWorkersPerCollection, dump_folder,
-                        enable_sharding, shard_config): db.strip()
+                        enable_sharding, shard_config, skip_export): db.strip()
             for db in databases
         }
 
