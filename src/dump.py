@@ -267,6 +267,32 @@ class MyDump(Shell):
             if os.path.exists(part_dir):
                 shutil.rmtree(part_dir)
 
+            # 修改分片元数据，将集合名改为当前分片的文件名
+            part_suffix = f"_part{shard_idx + 1:03d}"
+            shard_collection_name = f"{collection_name}{part_suffix}"
+            metadata_file = os.path.join(target_dir, f"{shard_collection_name}.metadata.json")
+
+            if os.path.exists(metadata_file):
+                try:
+                    with open(metadata_file, 'r', encoding='utf-8') as f:
+                        metadata = json.load(f)
+
+                    # 修改集合名称为分片文件名
+                    metadata['collectionName'] = shard_collection_name
+
+                    # 修改indexes中的ns字段
+                    if 'indexes' in metadata:
+                        for index in metadata['indexes']:
+                            if 'ns' in index:
+                                index['ns'] = f"{db_name}.{shard_collection_name}"
+
+                    with open(metadata_file, 'w', encoding='utf-8') as f:
+                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+                    print(f"📝 已修改分片元数据: {metadata_file}，集合名改为: {shard_collection_name}")
+                except Exception as e:
+                    print(f"⚠️ 修改分片元数据失败: {e}")
+
             print(f"✅ 分片 {shard_idx + 1} 导出完成，文件已移动到: {target_dir}")
 
         except Exception as e:
