@@ -180,14 +180,39 @@ class MyDump(Shell):
                         print(f"❌ 分片导出失败: {e}")
                         raise
 
-            # 分片文件直接导出到目标目录
-            db_dir = os.path.join(dump_root_path, db_name)
+            # 数据库目录
+            db_dir = os.path.join(dump_root_path, 'dumps', db_name)
             os.makedirs(db_dir, exist_ok=True)
 
-            # 分片导出已完成，无需移动文件
-            pass
+            # 收集所有分片文件并重命名移动到数据库目录
+            for i in range(len(ranges)):
+                part_suffix = f"_part{i+1:03d}"
+                part_dir_name = f"{collection_name}{part_suffix}"
+                part_dir = os.path.join(db_dir, part_dir_name)
 
-            # 保存分片元数据到分片目录
+                if os.path.exists(part_dir):
+                    # 构建目标文件名
+                    target_bson = os.path.join(db_dir, f"{collection_name}{part_suffix}.bson")
+                    target_metadata = os.path.join(db_dir, f"{collection_name}{part_suffix}.metadata.json")
+
+                    # 源文件路径
+                    source_bson = os.path.join(part_dir, f"{collection_name}.bson")
+                    source_metadata = os.path.join(part_dir, f"{collection_name}.metadata.json")
+
+                    # 移动并重命名文件
+                    if os.path.exists(source_bson):
+                        import shutil
+                        shutil.move(source_bson, target_bson)
+                    if os.path.exists(source_metadata):
+                        shutil.move(source_metadata, target_metadata)
+
+                    # 清理空的分片目录
+                    try:
+                        os.rmdir(part_dir)
+                    except:
+                        pass
+
+            # 保存分片元数据到数据库目录
             self._save_shard_metadata(db_dir, db_name, collection_name, ranges)
 
             print(f"🎉 集合 {db_name}.{collection_name} 分片导出完成，共 {len(ranges)} 个分片")
@@ -204,7 +229,7 @@ class MyDump(Shell):
             # 构建分片目录名和文件名
             part_suffix = f"_part{shard_idx+1:03d}"
             part_dir_name = f"{collection_name}{part_suffix}"
-            part_dir = os.path.join(output_dir, part_dir_name)
+            part_dir = os.path.join(output_dir, db_name, part_dir_name)
             os.makedirs(part_dir, exist_ok=True)
 
             # 构建查询条件
@@ -248,8 +273,6 @@ class MyDump(Shell):
             collection_bson = os.path.join(part_dir, f"{collection_name}.bson")
             collection_metadata = os.path.join(part_dir, f"{collection_name}.metadata.json")
 
-
-
             # 验证文件是否存在且不为空
             if not os.path.exists(collection_bson):
                 print(f"❌ 分片导出失败: 文件不存在 {collection_bson}")
@@ -264,7 +287,7 @@ class MyDump(Shell):
                 print(f"❌ 分片导出失败: 文件为空 {collection_bson} (大小: {file_size} 字节)")
                 raise Exception(f"分片导出失败: 文件为空 {collection_bson} (大小: {file_size} 字节)")
 
-            # 分片文件已在正确的分片目录中，无需重命名
+            # 分片文件已导出到分片目录，将在外层统一处理重命名和移动
             print(f"✅ 分片 {shard_idx + 1} 导出完成到: {part_dir}")
 
         except Exception as e:
