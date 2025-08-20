@@ -218,7 +218,6 @@ class MyDump(Shell):
 
             # 构建查询条件
             query_dict = obj_range.to_query()
-            query_json = json.dumps(query_dict, default=str) if query_dict else "{}"
 
             # 构建认证参数
             auth_append = ''
