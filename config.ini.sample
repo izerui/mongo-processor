@@ -1,24 +1,26 @@
 [global]
-databases=database1,database2,database3
+databases=bboss
+
 # 线程池并发配置（同时处理的数据库数量）
 maxThreads = 4
-# 单库导出导入并行处理collection的并发数
-numParallelCollections = 16
-# 每个集合的插入工作线程数
-numInsertionWorkersPerCollection = 8
 
 # 跳过导出，直接导入已有数据（默认false）
 skipExport = false
 
+# 单库导出导入并行处理collection的并发数
+numParallelCollections = 16
+# 每个集合的插入工作线程数
+numInsertionWorkersPerCollection = 16
+
 # 分片相关配置
 # 是否启用分片功能（默认true）
 enableSharding = true
-# 触发分片的最小文档数量（默认100万）
-minDocumentsForShard = 1000000
+# 触发分片的最小文档数量（默认10万）
+minDocumentsForShard = 100000
 # 默认分片数量（默认4）
 defaultShardCount = 4
 # 最大分片数量（默认16）
-maxShardCount = 16
+maxShardCount = 24
 
 [source]
 host=source-mongodb-host
