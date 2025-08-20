@@ -26,49 +26,11 @@ class MyRestore(Shell):
         :param database: 目标数据库名
         :param dump_root_path: 导出根路径
         """
-        self.restore_db_direct(database, dump_root_path)
-
-    def _import_single_file(self, database: str, target_collection: str, file_path: str, is_first_shard: bool = False) -> str:
         """
-        导入单个文件到指定集合
-        :param database: 数据库名
-        :param target_collection: 目标集合名
-        :param file_path: 文件路径
-        :param is_first_shard: 是否是第一个分片（决定是否drop）
-        :return: 导入结果描述
-        """
-        try:
-            # 构建认证参数
-            user_append = f'--username="{self.mongo.username}"' if self.mongo.username else ''
-            password_append = f'--password="{self.mongo.password}"' if self.mongo.password else ''
-            auth_append = f'--authenticationDatabase=admin' if self.mongo.username else ''
-
-            import_cmd = (
-                f'{mongorestore_exe} '
-                f'--host {self.mongo.host}:{self.mongo.port} '
-                f'{user_append} {password_append} {auth_append} '
-                f'--numParallelCollections=1 '
-                f'--numInsertionWorkersPerCollection={self.num_insertion_workers} '
-                f'--noIndexRestore '
-                f'{"--drop " if is_first_shard else ""}'
-                f'--db {database} '
-                f'--collection {target_collection} '
-                f'"{file_path}"'
-            )
-
-            self._exe_command(import_cmd)
-            file_name = os.path.basename(file_path)
-            return f"{file_name} -> {target_collection}"
-
-        except Exception as e:
-            raise Exception(f"导入 {file_path} 失败: {e}")
-
-    def restore_db_direct(self, database: str, dump_root_path: str) -> None:
-        """
-        高性能直接导入：自动识别分片集合并直接导入到原始集合
-        :param database: 目标数据库名
-        :param dump_root_path: 导出根路径
-        """
+                高性能直接导入：自动识别分片集合并直接导入到原始集合
+                :param database: 目标数据库名
+                :param dump_root_path: 导出根路径
+                """
         if not dump_root_path:
             print(f"⚠️ 没有提供数据库目录路径")
             return
@@ -130,7 +92,8 @@ class MyRestore(Shell):
                 for task_type, target_collection, file_path, is_first in import_tasks:
                     # 对于普通集合，总是使用drop；对于分片，只有第一个文件使用drop
                     should_drop = is_first and (task_type == 'sharded' or task_type == 'normal')
-                    future = executor.submit(self._import_single_file, database, target_collection, file_path, should_drop)
+                    future = executor.submit(self._import_single_file, database, target_collection, file_path,
+                                             should_drop)
                     future_to_task[future] = (task_type, target_collection, file_path)
 
                 # 收集结果
@@ -157,3 +120,39 @@ class MyRestore(Shell):
         except Exception as e:
             print(f'❌ 直接导入数据库 {database} 失败: {e}')
             raise
+
+
+def _import_single_file(self, database: str, target_collection: str, file_path: str, is_first_shard: bool = False) -> str:
+        """
+        导入单个文件到指定集合
+        :param database: 数据库名
+        :param target_collection: 目标集合名
+        :param file_path: 文件路径
+        :param is_first_shard: 是否是第一个分片（决定是否drop）
+        :return: 导入结果描述
+        """
+        try:
+            # 构建认证参数
+            user_append = f'--username="{self.mongo.username}"' if self.mongo.username else ''
+            password_append = f'--password="{self.mongo.password}"' if self.mongo.password else ''
+            auth_append = f'--authenticationDatabase=admin' if self.mongo.username else ''
+
+            import_cmd = (
+                f'{mongorestore_exe} '
+                f'--host {self.mongo.host}:{self.mongo.port} '
+                f'{user_append} {password_append} {auth_append} '
+                f'--numParallelCollections=1 '
+                f'--numInsertionWorkersPerCollection={self.num_insertion_workers} '
+                f'--noIndexRestore '
+                f'{"--drop " if is_first_shard else ""}'
+                f'--db {database} '
+                f'--collection {target_collection} '
+                f'"{file_path}"'
+            )
+
+            self._exe_command(import_cmd)
+            file_name = os.path.basename(file_path)
+            return f"{file_name} -> {target_collection}"
+
+        except Exception as e:
+            raise Exception(f"导入 {file_path} 失败: {e}")
