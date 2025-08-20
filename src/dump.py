@@ -131,6 +131,7 @@ class MyDump(Shell):
                 f'--host="{self.mongo.host}:{self.mongo.port}" '
                 f'--db={database} '
                 f'--out={dump_root_path} '
+                f'--numParallelCollections={self.numParallelCollections} '
                 f'{exclude_params} '
                 f'{auth_append}'
             )
