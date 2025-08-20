@@ -122,7 +122,7 @@ class MyRestore(Shell):
             raise
 
 
-def _import_single_file(self, database: str, target_collection: str, file_path: str, is_first_shard: bool = False) -> str:
+    def _import_single_file(self, database: str, target_collection: str, file_path: str, is_first_shard: bool = False) -> str:
         """
         导入单个文件到指定集合
         :param database: 数据库名
