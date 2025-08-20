@@ -66,7 +66,10 @@ class MyRestore(Shell):
                 print(f"⚠️ 数据库目录 {db_dump_dir} 中没有找到collection文件")
                 return
 
-            print(f"📊 发现 {len(collections)} 个collection需要恢复")
+            print(f"📊 发现 {len(collections)} 个collection需要恢复: {collections}")
+
+            # 调试：列出目录中的所有文件
+            print(f"📁 目录内容: {os.listdir(db_dump_dir)}")
 
             # 分析哪些collection需要分片恢复
             collections_to_shard = []
@@ -74,6 +77,8 @@ class MyRestore(Shell):
 
             for collection_name in collections:
                 # 检查是否存在分片元数据
+                metadata_file = os.path.join(db_dump_dir, f"{collection_name}_shards.json")
+                print(f"🔍 检查分片元文件: {metadata_file}")
                 metadata = self._read_shard_metadata(database, collection_name, db_dump_dir)
                 if metadata:
                     collections_to_shard.append((collection_name, metadata))
@@ -347,7 +352,7 @@ class MyRestore(Shell):
 
     def _read_shard_metadata(self, db_name: str, collection_name: str, db_dump_dir: str) -> Optional[Dict[str, Any]]:
         """读取分片元数据"""
-        metadata_file = os.path.join(db_dump_dir, db_name, f"{collection_name}_shards.json")
+        metadata_file = os.path.join(db_dump_dir, f"{collection_name}_shards.json")
         if not os.path.exists(metadata_file):
             return None
 
@@ -370,8 +375,16 @@ class MyRestore(Shell):
         for filename in os.listdir(db_dump_dir):
             if filename.endswith('.bson') and not filename.endswith('.metadata.json.bson'):
                 collection_name = filename.replace('.bson', '')
-                # 排除系统集合和分片文件
-                if not collection_name.startswith('system.') and not collection_name.endswith('_shard_'):
+
+                # 排除系统集合
+                if collection_name.startswith('system.'):
+                    continue
+
+                # 如果是分片文件，提取原始collection名称
+                if '_shard_' in collection_name:
+                    original_name = collection_name.split('_shard_')[0]
+                    collections.append(original_name)
+                else:
                     collections.append(collection_name)
 
         return list(set(collections))  # 去重
