@@ -101,81 +101,36 @@ class MyRestore(Shell):
                 # 收集结果
                 completed = 0
                 errors = []
-                try:
-                    for future in as_completed(future_to_task, timeout=None):  # 无超时限制
-                        task_type, target_collection, file_path = future_to_task[future]
-                        try:
-                            result = future.result()
-                            completed += 1
-                            print(f"✅ 集合导入成功: [{completed}/{len(import_tasks)}] {result}")
-                        except Exception as e:
-                            print(f"❌ 导入失败 {file_path}: {e}")
-                            # 如果是认证失败，给出提示
-                            if "authentication" in str(e).lower():
-                                print("🔑 请检查用户名、密码和认证数据库设置")
-                            elif "connection" in str(e).lower():
-                                print("🔗 请检查MongoDB连接参数")
-                            elif "file" in str(e).lower():
-                                print("📁 请检查文件路径和权限")
-                            elif "timeout" in str(e).lower():
-                                print("⏰ 命令执行超时，可尝试增加超时时间")
-                            errors.append(f"{file_path}: {e}")
 
-                    # 如果有错误，汇总后抛出
-                    if errors:
-                        raise Exception(f"导入过程中出现 {len(errors)} 个错误:\n" + "\n".join(errors))
+                for future in as_completed(future_to_task, timeout=None):  # 无超时限制
+                    task_type, target_collection, file_path = future_to_task[future]
+                    try:
+                        result = future.result()
+                        completed += 1
+                        print(f"✅ 集合导入成功: [{completed}/{len(import_tasks)}] {result}")
+                    except Exception as e:
+                        print(f"❌ 导入失败 {file_path}: {e}")
+                        # 如果是认证失败，给出提示
+                        if "authentication" in str(e).lower():
+                            print("🔑 请检查用户名、密码和认证数据库设置")
+                        elif "connection" in str(e).lower():
+                            print("🔗 请检查MongoDB连接参数")
+                        elif "file" in str(e).lower():
+                            print("📁 请检查文件路径和权限")
+                        elif "timeout" in str(e).lower():
+                            print("⏰ 命令执行超时，可尝试增加超时时间")
+                        errors.append(f"{file_path}: {e}")
 
-                except concurrent.futures.TimeoutError:
-                    raise Exception("导入操作超时，请检查网络连接和MongoDB状态")
-                except TimeoutError:
-                    print("⏰ 导入任务超时，正在取消所有任务...")
-                    if errors:
-                        raise Exception(f"导入过程中出现 {len(errors)} 个错误:\n" + "\n".join(errors))
-                    else:
-                        raise Exception("导入任务超时")
-                except Exception as e:
-                    if "errors" in str(e):
-                        raise  # 重新抛出汇总错误
-                    else:
-                        raise Exception(f"导入操作异常: {e}")
-                except Exception as e:
-                    if "errors" in str(e):
-                        raise  # 重新抛出汇总错误
-                    else:
-                        raise Exception(f"导入操作异常: {e}")
+                # 如果有错误，汇总后抛出
+                if errors:
+                    raise Exception(f"导入过程中出现 {len(errors)} 个错误:\n" + "\n".join(errors))
 
-                except TimeoutError:
-                    print("⏰ 导入任务超时，正在取消所有任务...")
-                    # 如果有错误，汇总后抛出
-                    if errors:
-                        raise Exception(f"导入过程中出现 {len(errors)} 个错误:\n" + "\n".join(errors))
-
-                except concurrent.futures.TimeoutError:
-                    raise Exception("导入操作超时，请检查网络连接和MongoDB状态")
-                except Exception as e:
-                    if "errors" in str(e):
-                        raise  # 重新抛出汇总错误
-                    else:
-                        raise Exception(f"导入失败: {e}")
-
-                except TimeoutError:
-                    print("⏰ 导入任务超时，正在取消所有任务...")
-                    for future in future_to_task:
-                        future.cancel()
-                    raise
-                except KeyboardInterrupt:
-                    print("⚠️  用户中断，正在取消所有任务...")
-                    for future in future_to_task:
-                        future.cancel()
-                    raise
-                finally:
-                    # 确保所有子进程被清理
-                    executor.shutdown(wait=False, cancel_futures=True)
+                print(f'✅ 数据库 {database} 并发导入完成')
 
             print(f'✅ 数据库 {database} 并发导入完成')
 
         except Exception as e:
-            print(f'❌ 直接导入数据库 {database} 失败: {e}')
+            print(f'❌ 导入数据库 {database} 失败: {e}')
             raise
 
 
@@ -210,6 +165,5 @@ class MyRestore(Shell):
             self._exe_command(import_cmd, timeout=None)
             file_name = os.path.basename(file_path)
             return f"{file_name} -> {target_collection}"
-
         except Exception as e:
             raise Exception(f"导入 {file_path} 失败: {e}")
