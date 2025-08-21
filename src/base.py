@@ -23,7 +23,7 @@ class Shell(object):
         start_time = time.time()
         start_datetime = datetime.now()
 
-        print(f"🚀 开始执行: {command}")
+        print(f"🚀 开始执行: \n{command}\n")
         def kill_process(p):
             """超时后杀死进程"""
             try:
