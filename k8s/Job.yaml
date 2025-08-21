@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongo-processor
+  namespace: platform-yunji
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        app-type: mongo-processor
+      tolerations:
+        - key: app-type
+          value: mongo-processor
+          operator: Equal
+          effect: NoSchedule
+      containers:
+        - name: mongo-processor
+          image: harbor.yunjizhizao.com/serv999/hub/izerui/mongo-processor:latest
+          imagePullPolicy: Always
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.ini
+              subPath: config.ini
+              readOnly: true
+            - name: mongo-storage
+              mountPath: /app/dumps
+              subPath: dumps
+          resources:
+            requests:
+              memory: "8Gi"
+              cpu: "2000m"
+      volumes:
+        - name: config
+          configMap:
+            name: mongo-processor-config
+        - name: mongo-storage
+          persistentVolumeClaim:
+            claimName: mongo-processor-pvc
