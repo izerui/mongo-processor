@@ -385,4 +385,4 @@ class MyMongo(object):
         except Exception as e:
             elapsed = time.time() - start_time
             print(f"❌ [{datetime.now().strftime('%H:%M:%S')}] 命令执行异常: {e}")
-            raise BaseException(f'命令执行失败: {e}')
+            raise BaseException(f'命令执行失败: {e} 命令: \n{command}')
