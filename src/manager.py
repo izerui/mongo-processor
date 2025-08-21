@@ -196,7 +196,7 @@ class Manager:
             except Exception as e:
                 print(f"⚠️  索引创建过程中发生错误: {e}")
 
-        print("✅ 数据导出导入程序执行完成")
+        print("✅ ==================== 数据导出导入程序执行完成 ====================")
 
     def recreate_indexes_for_database(self, database_name: str) -> Dict[str, Any]:
         """
