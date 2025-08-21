@@ -12,18 +12,39 @@ class Shell(object):
         :param command: shell 命令
         :return: process, exitcode
         """
-        print(command)
-        process = Popen(command, stdout=PIPE, stderr=STDOUT, shell=True)
-        with process.stdout:
-            for line in iter(process.stdout.readline, b''):
+        def _exe_command(self, command, timeout=300):
+            """执行命令，支持超时和优雅关闭"""
+            print(f"执行命令: \n{command}")
+            try:
+                process = Popen(command, stdout=PIPE, stderr=STDOUT, shell=True, text=True)
+                output_lines = []
+
                 try:
-                    print(line.decode().strip())
-                except:
-                    print(str(line))
-        exitcode = process.wait()
-        if exitcode != 0:
-            raise BaseException('命令执行失败')
-        return process, exitcode
+                    # 设置超时，默认5分钟
+                    stdout, stderr = process.communicate(timeout=timeout)
+                    if stdout:
+                        for line in stdout.splitlines():
+                            print(line.strip())
+                            output_lines.append(line.strip())
+
+                    exitcode = process.returncode
+                    if exitcode != 0:
+                        error_msg = '\n'.join(output_lines[-5:]) if output_lines else "无错误输出"
+                        raise BaseException(f'命令执行失败 (exit code: {exitcode})\n错误详情: {error_msg}')
+
+                    return process, exitcode
+
+                except TimeoutExpired:
+                    # 超时处理
+                    print(f"⏰ 命令执行超时({timeout}秒)，正在终止进程...")
+                    process.kill()
+                    process.wait()
+                    raise BaseException(f"命令执行超时({timeout}秒)")
+
+            except Exception as e:
+                if "timeout" in str(e).lower():
+                    raise
+                raise BaseException(f'命令执行失败: {str(e)}')
 
 
 class Mongo:

@@ -14,11 +14,12 @@ class MyRestore(Shell):
     按数据库整体导入
     """
 
-    def __init__(self, mongo: Mongo, num_parallel_collections: int = 4, num_insertion_workers: int = 4):
+    def __init__(self, mongo: Mongo, num_parallel_collections: int = 4, num_insertion_workers: int = 4, command_timeout: int = 600):
         super().__init__()
         self.mongo = mongo
         self.num_parallel_collections = num_parallel_collections
         self.num_insertion_workers = num_insertion_workers
+        self.command_timeout = command_timeout  # 命令超时时间（秒）
 
     def restore_db(self, database: str, dump_root_path: str) -> None:
         """
@@ -98,22 +99,39 @@ class MyRestore(Shell):
 
                 # 收集结果
                 completed = 0
-                for future in as_completed(future_to_task):
-                    task_type, target_collection, file_path = future_to_task[future]
-                    try:
-                        result = future.result()
-                        completed += 1
-                        print(f"✅ [{completed}/{len(import_tasks)}] {result}")
-                    except Exception as e:
-                        print(f"❌ 导入失败 {file_path}: {e}")
-                        # 如果是认证失败，给出提示
-                        if "authentication" in str(e).lower():
-                            print("🔑 请检查用户名、密码和认证数据库设置")
-                        elif "connection" in str(e).lower():
-                            print("🔗 请检查MongoDB连接参数")
-                        elif "file" in str(e).lower():
-                            print("📁 请检查文件路径和权限")
-                        raise
+                try:
+                    for future in as_completed(future_to_task, timeout=1800):  # 30分钟超时
+                        task_type, target_collection, file_path = future_to_task[future]
+                        try:
+                            result = future.result()
+                            completed += 1
+                            print(f"✅ [{completed}/{len(import_tasks)}] {result}")
+                        except Exception as e:
+                            print(f"❌ 导入失败 {file_path}: {e}")
+                            # 如果是认证失败，给出提示
+                            if "authentication" in str(e).lower():
+                                print("🔑 请检查用户名、密码和认证数据库设置")
+                            elif "connection" in str(e).lower():
+                                print("🔗 请检查MongoDB连接参数")
+                            elif "file" in str(e).lower():
+                                print("📁 请检查文件路径和权限")
+                            elif "timeout" in str(e).lower():
+                                print("⏰ 命令执行超时，可尝试增加超时时间")
+                            raise
+
+                except TimeoutError:
+                    print("⏰ 导入任务超时，正在取消所有任务...")
+                    for future in future_to_task:
+                        future.cancel()
+                    raise
+                except KeyboardInterrupt:
+                    print("⚠️  用户中断，正在取消所有任务...")
+                    for future in future_to_task:
+                        future.cancel()
+                    raise
+                finally:
+                    # 确保所有子进程被清理
+                    executor.shutdown(wait=False, cancel_futures=True)
 
             print(f'✅ 数据库 {database} 并发导入完成')
 
@@ -150,7 +168,7 @@ class MyRestore(Shell):
                 f'"{file_path}"'
             )
 
-            self._exe_command(import_cmd)
+            self._exe_command(import_cmd, timeout=self.command_timeout)
             file_name = os.path.basename(file_path)
             return f"{file_name} -> {target_collection}"
 
