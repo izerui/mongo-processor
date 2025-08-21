@@ -3,35 +3,29 @@
 数据库导出类 - 支持分片导出
 集成了分片判断、范围计算和导出逻辑
 """
-import os
-import json
 import math
-from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from pymongo import MongoClient
-from pymongo.collection import Collection
-from bson import ObjectId
+import os
 import shutil
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Optional
 
-from base import Shell, Mongo, mongodump_exe, ObjectIdRange
+from bson import ObjectId
 
+from base import MyMongo, Mongo, ObjectIdRange
 from base import ShardConfig
 
 
-class MyDump(Shell):
+class MyDump(MyMongo):
     """
     按数据库整体导出，支持大collection分片
     """
 
     def __init__(self, mongo: Mongo, numParallelCollections: int = 4,
                  enable_sharding: bool = True, shard_config: Optional[ShardConfig] = None):
-        super().__init__()
-        self.mongo = mongo
+        super().__init__(mongo)
         self.numParallelCollections = numParallelCollections
         self.enable_sharding = enable_sharding
         self.shard_config = shard_config or ShardConfig()
-        self.client = None
 
     def export_db(self, database: str, dump_root_path: str):
         """
@@ -56,11 +50,10 @@ class MyDump(Shell):
         """
         支持分片的数据库导出 - 使用快速统计信息优化判断
         """
-        import shutil
 
         try:
             # 获取数据库中的所有collection
-            collections = self._get_database_collections(database)
+            collections = self.get_database_collections(database)
             if not collections:
                 print(f"⚠️ 数据库 {database} 中没有collection")
                 return os.path.join(dump_root_path, database)
@@ -72,7 +65,7 @@ class MyDump(Shell):
             small_collections = []
 
             # 批量获取所有集合的统计信息
-            collection_counts = self._get_collection_counts_fast(database)
+            collection_counts = self.get_collection_counts_fast(database)
 
             for collection_name in collections:
                 count = collection_counts.get(collection_name, 0)
@@ -136,7 +129,7 @@ class MyDump(Shell):
 
             # 构建导出命令 - 导出整个数据库但排除大集合
             export_cmd = (
-                f'{mongodump_exe} '
+                f'{self.mongodump_exe} '
                 f'--host="{self.mongo.host}:{self.mongo.port}" '
                 f'--db={database} '
                 f'--out={dump_root_path} '
@@ -146,13 +139,14 @@ class MyDump(Shell):
             )
 
             print(f"📦 导出非大集合: 排除 {len(exclude_collections)} 个集合")
-            self._exe_command(export_cmd, timeout=None)
+            self.exe_command(export_cmd, timeout=None)
 
         except Exception as e:
             print(f'❌ 导出非大集合失败: {e}')
             raise
 
-    def _export_collection_shards(self, db_name: str, collection_name: str, dump_root_path: str, exact_count: int = None):
+    def _export_collection_shards(self, db_name: str, collection_name: str, dump_root_path: str,
+                                  exact_count: int = None):
         """分片导出单个collection，使用临时目录和重命名机制"""
         try:
             # 计算分片数量（使用精确计数）
@@ -226,7 +220,7 @@ class MyDump(Shell):
 
             # 构建导出命令 - 导出到分片目录
             export_cmd = (
-                f'{mongodump_exe} '
+                f'{self.mongodump_exe} '
                 f'--host="{self.mongo.host}:{self.mongo.port}" '
                 f'--db={db_name} '
                 f'--collection={collection_name} '
@@ -250,7 +244,7 @@ class MyDump(Shell):
                     export_cmd += f' --query=\'{query_str}\''
 
             # 执行分片导出
-            self._exe_command(export_cmd, timeout=None)
+            self.exe_command(export_cmd, timeout=None)
 
             # 验证分片目录中的导出结果
             collection_bson = os.path.join(part_dir, db_name, f"{collection_name}.bson")
@@ -322,7 +316,7 @@ class MyDump(Shell):
 
             # 构建导出命令
             export_cmd = (
-                f'{mongodump_exe} '
+                f'{self.mongodump_exe} '
                 f'--host="{self.mongo.host}:{self.mongo.port}" '
                 f'--db={db_name} '
                 f'--collection={collection_name} '
@@ -331,7 +325,7 @@ class MyDump(Shell):
             )
 
             # 执行导出
-            self._exe_command(export_cmd, timeout=None)
+            self.exe_command(export_cmd, timeout=None)
 
             # 验证文件是否存在且不为空
             output_bson = os.path.join(dump_root_path, db_name, f"{collection_name}.bson")
@@ -348,102 +342,6 @@ class MyDump(Shell):
             print(f"❌ 常规导出集合 {db_name}.{collection_name} 失败: {e}")
             raise
 
-    def _save_shard_metadata(self, output_dir: str, db_name: str, collection_name: str, ranges: List[ObjectIdRange]):
-        """保存分片元数据"""
-        try:
-            metadata = {
-                "collection": collection_name,
-                "shard_count": len(ranges),
-                "created_at": datetime.now().isoformat(),
-                "ranges": [
-                    {
-                        "shard_index": i,
-                        "start_id": str(r.start_id) if r.start_id else None,
-                        "end_id": str(r.end_id) if r.end_id else None
-                    }
-                    for i, r in enumerate(ranges)
-                ]
-            }
-
-            db_dir = os.path.join(output_dir, db_name)
-            metadata_file = os.path.join(db_dir, f"{collection_name}_shards.json")
-            with open(metadata_file, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
-
-            print(f"💾 已保存分片元数据: {metadata_file}")
-
-        except Exception as e:
-            print(f"⚠️ 保存分片元数据失败: {e}")
-
-    def _connect(self) -> bool:
-        """建立MongoDB连接"""
-        try:
-            if self.mongo.username and self.mongo.password:
-                uri = f"mongodb://{self.mongo.username}:{self.mongo.password}@{self.mongo.host}:{self.mongo.port}/admin"
-            else:
-                uri = f"mongodb://{self.mongo.host}:{self.mongo.port}/"
-
-            self.client = MongoClient(uri)
-            return True
-        except Exception as e:
-            print(f"❌ MongoDB连接失败: {e}")
-            return False
-
-    def _disconnect(self):
-        """断开MongoDB连接"""
-        if self.client:
-            self.client.close()
-
-    def _get_database_collections(self, database: str) -> List[str]:
-        """获取数据库中的所有collection名称"""
-        try:
-            if not self._connect():
-                return []
-
-            db = self.client[database]
-
-            # 获取所有collection名称，排除系统collection
-            collections = [name for name in db.list_collection_names()
-                           if not name.startswith('system.')]
-
-            return collections
-
-        except Exception as e:
-            print(f"❌ 获取数据库 {database} collection列表失败: {e}")
-            return []
-
-    def _get_collection_counts_fast(self, database: str) -> dict:
-        """使用快速统计信息获取集合文档数量"""
-        try:
-            if not self._connect():
-                return {}
-
-            db = self.client[database]
-            collection_stats = {}
-
-            # 使用listCollections获取所有集合
-            collections = db.list_collections()
-            for collection_info in collections:
-                collection_name = collection_info['name']
-                if collection_name.startswith('system.'):
-                    continue
-
-                try:
-                    # 使用stats()获取快速统计信息
-                    stats = db.command('collStats', collection_name)
-                    count = stats.get('count', 0)
-                    collection_stats[collection_name] = count
-                    print(f"📊 {database}.{collection_name}: {count:,}条文档")
-                except Exception as e:
-                    print(f"⚠️ 获取{database}.{collection_name}统计失败: {e}")
-                    collection_stats[collection_name] = 0
-
-            return collection_stats
-
-        except Exception as e:
-            print(f"❌ 获取数据库 {database} 集合统计信息失败: {e}")
-            return {}
-
     def _export_db_normal(self, database: str, dump_root_path: str):
         """常规数据库导出（不使用分片）"""
         try:
@@ -456,7 +354,7 @@ class MyDump(Shell):
 
             # 构建导出命令 - 直接导出到dumps/{database}/
             export_cmd = (
-                f'{mongodump_exe} '
+                f'{self.mongodump_exe} '
                 f'--host="{self.mongo.host}:{self.mongo.port}" '
                 f'--db={database} '
                 f'--out={dump_root_path} '
@@ -464,7 +362,7 @@ class MyDump(Shell):
             )
 
             # 执行导出
-            self._exe_command(export_cmd, timeout=None)
+            self.exe_command(export_cmd, timeout=None)
 
             # 验证数据库目录是否存在且包含文件
             db_dir = os.path.join(dump_root_path, database)
@@ -490,27 +388,6 @@ class MyDump(Shell):
         except Exception as e:
             print(f'❌ 常规导出数据库 {database} 失败: {e}')
             raise
-
-    def _should_shard_collection(self, database: str, collection_name: str, doc_count: int = None) -> bool:
-        """判断collection是否需要分片导出"""
-        try:
-            if doc_count is None:
-                if not self._connect():
-                    return False
-                db = self.client[database]
-                collection = db[collection_name]
-                doc_count = collection.estimated_document_count()
-
-            # 使用精确计数判断是否需要分片
-            is_large = doc_count >= self.shard_config.min_documents_for_shard
-            if is_large:
-                print(f"📊 大集合 {database}.{collection_name}: {doc_count:,} 条记录")
-
-            return is_large
-
-        except Exception as e:
-            print(f"⚠️ 判断collection {database}.{collection_name} 分片需求失败: {e}")
-            return False
 
     def _calculate_optimal_shard_count(self, database: str, collection_name: str, doc_count: int = None) -> int:
         """计算最优分片数量（使用精确计数）"""
@@ -542,7 +419,8 @@ class MyDump(Shell):
             print(f"⚠️ 计算分片数量失败: {e}")
             return self.shard_config.default_shard_count
 
-    def _get_collection_objectid_ranges(self, db_name: str, collection_name: str, shard_count: int, doc_count: int = None) -> List[
+    def _get_collection_objectid_ranges(self, db_name: str, collection_name: str, shard_count: int,
+                                        doc_count: int = None) -> List[
         ObjectIdRange]:
         """获取collection的ObjectId分片范围"""
         try:
@@ -613,7 +491,3 @@ class MyDump(Shell):
 
         except Exception as e:
             return []
-
-    def get_shard_config(self) -> ShardConfig:
-        """获取分片配置"""
-        return self.shard_config

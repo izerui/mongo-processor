@@ -7,17 +7,16 @@ from typing import List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pymongo import MongoClient
 
-from base import Shell, Mongo, mongorestore_exe
+from base import MyMongo, Mongo
 
 
-class MyRestore(Shell):
+class MyRestore(MyMongo):
     """
     按数据库整体导入
     """
 
     def __init__(self, mongo: Mongo, num_parallel_collections: int = 4, num_insertion_workers: int = 4, command_timeout: int = 600):
-        super().__init__()
-        self.mongo = mongo
+        super().__init__(mongo)
         self.num_parallel_collections = num_parallel_collections
         self.num_insertion_workers = num_insertion_workers
         self.command_timeout = command_timeout  # 命令超时时间（秒）
@@ -68,14 +67,17 @@ class MyRestore(Shell):
             # 分片任务：每个分片文件导入到原始集合
             for original_name, shard_files in sharded_collections.items():
                 for i, shard_file in enumerate(shard_files):
-                    is_first = (i == 0)  # 只有第一个分片文件使用--drop
-                    import_tasks.append(('sharded', original_name, shard_file, is_first))
+                    import_tasks.append(('sharded', original_name, shard_file))
+
+            # 先删除原始集合（仅针对分片集合）
+            for original_name in sharded_collections:
+                self.client[database][original_name].drop()
 
             # 普通任务：每个普通集合单独导入
             for collection_name in normal_collections:
                 bson_file = os.path.join(db_dir, f"{collection_name}.bson")
                 if os.path.exists(bson_file):
-                    import_tasks.append(('normal', collection_name, bson_file, True))
+                    import_tasks.append(('normal', collection_name, bson_file))
 
             if not import_tasks:
                 print("⚠️ 没有找到需要导入的文件")
@@ -91,10 +93,10 @@ class MyRestore(Shell):
             with ThreadPoolExecutor(max_workers=self.num_parallel_collections) as executor:
                 future_to_task = {}
 
-                for task_type, target_collection, file_path, is_first in import_tasks:
+                for task_type, target_collection, file_path in import_tasks:
                     # 对于普通集合，总是使用drop；对于分片，只有第一个文件使用drop
                     future = executor.submit(self._import_single_file, database, target_collection, file_path,
-                                             is_first)
+                                             task_type == 'sharded')
                     future_to_task[future] = (task_type, target_collection, file_path)
 
                 # 收集结果
@@ -133,13 +135,13 @@ class MyRestore(Shell):
             raise
 
 
-    def _import_single_file(self, database: str, target_collection: str, file_path: str, is_first_shard: bool = False) -> str:
+    def _import_single_file(self, database: str, target_collection: str, file_path: str, is_sharded: bool = False) -> str:
         """
         导入单个文件到指定集合
         :param database: 数据库名
         :param target_collection: 目标集合名
         :param file_path: 文件路径
-        :param is_first_shard: 是否是第一个分片（决定是否drop）
+        :param is_sharded: 是否是分片
         :return: 导入结果描述
         """
         try:
@@ -149,19 +151,19 @@ class MyRestore(Shell):
             auth_append = f'--authenticationDatabase=admin' if self.mongo.username else ''
 
             import_cmd = (
-                f'{mongorestore_exe} '
+                f'{self.mongorestore_exe} '
                 f'--host {self.mongo.host}:{self.mongo.port} '
                 f'{user_append} {password_append} {auth_append} '
                 f'--numParallelCollections=1 '
                 f'--numInsertionWorkersPerCollection={self.num_insertion_workers} '
                 f'--noIndexRestore '
-                f'{"--drop " if is_first_shard else ""}'
+                f'{"--drop " if not is_sharded else ""}'
                 f'--db {database} '
                 f'--collection {target_collection} '
                 f'"{file_path}"'
             )
 
-            self._exe_command(import_cmd, timeout=None)
+            self.exe_command(import_cmd, timeout=None)
             file_name = os.path.basename(file_path)
             return f"{file_name} -> {target_collection}"
         except Exception as e:

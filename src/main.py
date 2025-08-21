@@ -267,10 +267,6 @@ def main():
             else:
                 print(f"\n   🎉 所有数据库索引创建成功!")
 
-            # 关闭客户端连接
-            source_client.close()
-            target_client.close()
-
         except Exception as e:
             print(f"⚠️  索引创建过程中发生错误: {e}")
 
