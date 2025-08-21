@@ -7,12 +7,12 @@ import math
 import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional
+from typing import List
 
 from bson import ObjectId
 
-from base import MyMongo, Mongo, ObjectIdRange
-from base import ShardConfig
+from base import MyMongo, MongoConfig, ObjectIdRange
+from src.base import GlobalConfig
 
 
 class MyDump(MyMongo):
@@ -20,33 +20,28 @@ class MyDump(MyMongo):
     按数据库整体导出，支持大collection分片
     """
 
-    def __init__(self, mongo: Mongo, numParallelCollections: int = 4,
-                 enable_sharding: bool = True, shard_config: Optional[ShardConfig] = None):
-        super().__init__(mongo)
-        self.numParallelCollections = numParallelCollections
-        self.enable_sharding = enable_sharding
-        self.shard_config = shard_config or ShardConfig()
+    def __init__(self, mongo: MongoConfig, global_config: GlobalConfig):
+        super().__init__(mongo, global_config)
 
-    def export_db(self, database: str, dump_root_path: str):
+    def export_db(self, database: str):
         """
         按数据库整体导出，支持大collection自动分片
         :param database: 数据库名
-        :param dump_root_path: 导出根目录
         :return: 导出的数据库目录路径
         """
         try:
             print(f"🚀 开始导出数据库: {database}")
 
-            if self.enable_sharding:
-                return self._export_db_with_sharding(database, dump_root_path)
+            if self.global_config.enable_sharding:
+                return self._export_db_with_sharding(database)
             else:
-                return self._export_db_normal(database, dump_root_path)
+                return self._export_db_normal(database)
 
         except Exception as e:
             print(f'❌ 导出数据库 {database} 失败: {e}')
             raise
 
-    def _export_db_with_sharding(self, database: str, dump_root_path: str):
+    def _export_db_with_sharding(self, database: str):
         """
         支持分片的数据库导出 - 使用快速统计信息优化判断
         """
@@ -56,7 +51,7 @@ class MyDump(MyMongo):
             collections = self.get_database_collections(database)
             if not collections:
                 print(f"⚠️ 数据库 {database} 中没有collection")
-                return os.path.join(dump_root_path, database)
+                return os.path.join(self.global_config.dump_root_path, database)
 
             print(f"📊 数据库 {database} 包含 {len(collections)} 个collection")
 
@@ -69,7 +64,7 @@ class MyDump(MyMongo):
 
             for collection_name in collections:
                 count = collection_counts.get(collection_name, 0)
-                if count >= self.shard_config.min_documents_for_shard:
+                if count >= self.global_config.min_documents_for_shard:
                     large_collections.append(collection_name)
                 else:
                     small_collections.append(collection_name)
@@ -77,24 +72,22 @@ class MyDump(MyMongo):
             # 步骤1: 使用exclude参数导出所有非大集合
             if small_collections:
                 print(f"📦 开始导出 {len(small_collections)} 个非大集合...")
-                self._export_collections_with_exclude(database, large_collections, dump_root_path)
+                self._export_collections_with_exclude(database, large_collections)
 
             # 步骤2: 分片导出所有大集合（使用精确计数计算分片）
             if large_collections:
                 print(f"🔄 开始分片导出 {len(large_collections)} 个大集合...")
-                with ThreadPoolExecutor(max_workers=self.numParallelCollections) as executor:
+                with ThreadPoolExecutor(max_workers=self.global_config.numParallelCollections) as executor:
                     futures = []
                     for collection_name in large_collections:
                         # 获取精确计数用于分片计算
-                        if not self._connect():
-                            continue
                         db = self.client[database]
                         collection = db[collection_name]
                         exact_count = collection.count_documents({})
 
                         future = executor.submit(
                             self._export_collection_shards,
-                            database, collection_name, dump_root_path, exact_count
+                            database, collection_name, exact_count
                         )
                         futures.append((future, collection_name))
 
@@ -107,21 +100,19 @@ class MyDump(MyMongo):
                             raise
 
             # 数据库导出完成
-            return os.path.join(dump_root_path, database)
+            return os.path.join(self.global_config.dump_root_path, database)
 
         except Exception as e:
             print(f'❌ 分片导出数据库 {database} 失败: {e}')
             raise
-        finally:
-            self._disconnect()
 
-    def _export_collections_with_exclude(self, database: str, exclude_collections: List[str], dump_root_path: str):
+    def _export_collections_with_exclude(self, database: str, exclude_collections: List[str]):
         """使用exclude参数导出除指定集合外的所有集合"""
         try:
             # 构建认证参数
             auth_append = ''
-            if self.mongo.username and self.mongo.password:
-                auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin'
+            if self.mongo_config.username and self.mongo_config.password:
+                auth_append = f'--username={self.mongo_config.username} --password="{self.mongo_config.password}" --authenticationDatabase=admin'
                 # 构建exclude参数
                 exclude_params = ''
                 if exclude_collections and len(exclude_collections) > 0:
@@ -130,10 +121,10 @@ class MyDump(MyMongo):
             # 构建导出命令 - 导出整个数据库但排除大集合
             export_cmd = (
                 f'{self.mongodump_exe} '
-                f'--host="{self.mongo.host}:{self.mongo.port}" '
+                f'--host="{self.mongo_config.host}:{self.mongo_config.port}" '
                 f'--db={database} '
-                f'--out={dump_root_path} '
-                f'--numParallelCollections={self.numParallelCollections} '
+                f'--out={self.global_config.dump_root_path} '
+                f'--numParallelCollections={self.global_config.numParallelCollections} '
                 f'{exclude_params} '
                 f'{auth_append}'
             )
@@ -145,14 +136,11 @@ class MyDump(MyMongo):
             print(f'❌ 导出非大集合失败: {e}')
             raise
 
-    def _export_collection_shards(self, db_name: str, collection_name: str, dump_root_path: str,
-                                  exact_count: int = None):
+    def _export_collection_shards(self, db_name: str, collection_name: str, exact_count: int = None):
         """分片导出单个collection，使用临时目录和重命名机制"""
         try:
             # 计算分片数量（使用精确计数）
             if exact_count is None:
-                if not self._connect():
-                    return self._export_collection_normal(db_name, collection_name, dump_root_path)
                 db = self.client[db_name]
                 exact_count = db[collection_name].count_documents({})
 
@@ -162,13 +150,13 @@ class MyDump(MyMongo):
             ranges = self._get_collection_objectid_ranges(db_name, collection_name, shard_count, exact_count)
             if not ranges:
                 print(f"⚠️ 无法获取集合 {db_name}.{collection_name} 的分片范围，使用常规导出")
-                return self._export_collection_normal(db_name, collection_name, dump_root_path)
+                return self._export_collection_normal(db_name, collection_name)
 
             print(f"🔄 开始分片导出 {db_name}.{collection_name}，分片数: {len(ranges)}，文档数: {exact_count:,}")
 
             # 创建分片导出目录结构: dumps/{database}/{collection}_partXXX/
-            dumps_dir = os.path.join(dump_root_path, db_name)
-            os.makedirs(dumps_dir, exist_ok=True)
+            # db_dumps_dir = os.path.join(self.global_config.dump_root_path, db_name)
+            # os.makedirs(db_dumps_dir, exist_ok=True)
 
             # 并发导出分片（并发度=分片数）
             with ThreadPoolExecutor(max_workers=len(ranges)) as executor:
@@ -176,7 +164,7 @@ class MyDump(MyMongo):
                 for i, obj_range in enumerate(ranges):
                     future = executor.submit(
                         self._export_single_shard,
-                        db_name, collection_name, dump_root_path, i, obj_range
+                        db_name, collection_name, i, obj_range
                     )
                     futures.append(future)
 
@@ -188,7 +176,7 @@ class MyDump(MyMongo):
                         raise
 
             # 数据库目录
-            db_dir = os.path.join(dump_root_path, db_name)
+            db_dir = os.path.join(self.global_config.dump_root_path, db_name)
             os.makedirs(db_dir, exist_ok=True)
 
             # 保存分片元数据到数据库目录
@@ -200,14 +188,13 @@ class MyDump(MyMongo):
             print(f"❌ 分片导出集合 {db_name}.{collection_name} 失败: {e}")
             raise
 
-    def _export_single_shard(self, db_name: str, collection_name: str,
-                             dump_root_path: str, shard_idx: int, obj_range: ObjectIdRange):
+    def _export_single_shard(self, db_name: str, collection_name: str, shard_idx: int, obj_range: ObjectIdRange):
         """导出单个分片到指定目录"""
         try:
             # 构建分片目录名和文件名
             part_suffix = f"_part{shard_idx + 1:03d}"
             collection_dir_name = f"{collection_name}{part_suffix}"
-            part_dir = os.path.join(dump_root_path, db_name, collection_dir_name)
+            part_dir = os.path.join(self.global_config.dump_root_path, db_name, collection_dir_name)
             os.makedirs(part_dir, exist_ok=True)
 
             # 构建查询条件
@@ -215,13 +202,13 @@ class MyDump(MyMongo):
 
             # 构建认证参数
             auth_append = ''
-            if self.mongo.username and self.mongo.password:
-                auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin'
+            if self.mongo_config.username and self.mongo_config.password:
+                auth_append = f'--username={self.mongo_config.username} --password="{self.mongo_config.password}" --authenticationDatabase=admin'
 
             # 构建导出命令 - 导出到分片目录
             export_cmd = (
                 f'{self.mongodump_exe} '
-                f'--host="{self.mongo.host}:{self.mongo.port}" '
+                f'--host="{self.mongo_config.host}:{self.mongo_config.port}" '
                 f'--db={db_name} '
                 f'--collection={collection_name} '
                 f'--out={part_dir} '
@@ -260,7 +247,7 @@ class MyDump(MyMongo):
                 raise Exception(f"分片导出失败: 文件不存在 {collection_bson}")
 
             # 构建目标路径（移动到外层 os.path.join(dump_root_path, db_name)）
-            target_dir = os.path.join(dump_root_path, db_name)
+            target_dir = os.path.join(self.global_config.dump_root_path, db_name)
             target_bson = os.path.join(target_dir, f"{collection_name}{part_suffix}.bson")
             target_metadata = os.path.join(target_dir, f"{collection_name}{part_suffix}.metadata.json")
 
@@ -274,53 +261,27 @@ class MyDump(MyMongo):
             if os.path.exists(part_dir):
                 shutil.rmtree(part_dir)
 
-            # 修改分片元数据，将集合名改为当前分片的文件名
-            part_suffix = f"_part{shard_idx + 1:03d}"
-            shard_collection_name = f"{collection_name}{part_suffix}"
-            # metadata_file = os.path.join(target_dir, f"{shard_collection_name}.metadata.json")
-
-            # if os.path.exists(metadata_file):
-            #     try:
-            #         with open(metadata_file, 'r', encoding='utf-8') as f:
-            #             metadata = json.load(f)
-            #
-            #         # 修改集合名称为分片文件名
-            #         metadata['collectionName'] = shard_collection_name
-            #
-            #         # 修改indexes中的ns字段
-            #         if 'indexes' in metadata:
-            #             for index in metadata['indexes']:
-            #                 if 'ns' in index:
-            #                     index['ns'] = f"{db_name}.{shard_collection_name}"
-            #
-            #         with open(metadata_file, 'w', encoding='utf-8') as f:
-            #             json.dump(metadata, f, indent=2, ensure_ascii=False)
-            #
-            #         print(f"📝 已修改分片元数据: {metadata_file}，集合名改为: {shard_collection_name}")
-            #     except Exception as e:
-            #         print(f"⚠️ 修改分片元数据失败: {e}")
-
             print(f"✅ 分片 {shard_idx + 1} 导出完成，文件已移动到: {target_dir}")
 
         except Exception as e:
             print(f"❌ 导出分片 {shard_idx + 1} 失败: {e}")
             raise
 
-    def _export_collection_normal(self, db_name: str, collection_name: str, dump_root_path: str):
+    def _export_collection_normal(self, db_name: str, collection_name: str):
         """常规导出单个collection（不分片）"""
         try:
             # 构建认证参数
             auth_append = ''
-            if self.mongo.username and self.mongo.password:
-                auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin'
+            if self.mongo_config.username and self.mongo_config.password:
+                auth_append = f'--username={self.mongo_config.username} --password="{self.mongo_config.password}" --authenticationDatabase=admin'
 
             # 构建导出命令
             export_cmd = (
                 f'{self.mongodump_exe} '
-                f'--host="{self.mongo.host}:{self.mongo.port}" '
+                f'--host="{self.mongo_config.host}:{self.mongo_config.port}" '
                 f'--db={db_name} '
                 f'--collection={collection_name} '
-                f'--out={dump_root_path} '
+                f'--out={self.global_config.dump_root_path} '
                 f'{auth_append}'
             )
 
@@ -328,7 +289,7 @@ class MyDump(MyMongo):
             self.exe_command(export_cmd, timeout=None)
 
             # 验证文件是否存在且不为空
-            output_bson = os.path.join(dump_root_path, db_name, f"{collection_name}.bson")
+            output_bson = os.path.join(self.global_config.dump_root_path, db_name, f"{collection_name}.bson")
             if not os.path.exists(output_bson):
                 raise Exception(f"常规导出失败: 文件不存在 {output_bson}")
 
@@ -342,22 +303,22 @@ class MyDump(MyMongo):
             print(f"❌ 常规导出集合 {db_name}.{collection_name} 失败: {e}")
             raise
 
-    def _export_db_normal(self, database: str, dump_root_path: str):
+    def _export_db_normal(self, database: str):
         """常规数据库导出（不使用分片）"""
         try:
             print(f"📦 开始常规导出数据库: {database}")
 
             # 构建认证参数
             auth_append = ''
-            if self.mongo.username and self.mongo.password:
-                auth_append = f'--username={self.mongo.username} --password="{self.mongo.password}" --authenticationDatabase=admin'
+            if self.mongo_config.username and self.mongo_config.password:
+                auth_append = f'--username={self.mongo_config.username} --password="{self.mongo_config.password}" --authenticationDatabase=admin'
 
             # 构建导出命令 - 直接导出到dumps/{database}/
             export_cmd = (
                 f'{self.mongodump_exe} '
-                f'--host="{self.mongo.host}:{self.mongo.port}" '
+                f'--host="{self.mongo_config.host}:{self.mongo_config.port}" '
                 f'--db={database} '
-                f'--out={dump_root_path} '
+                f'--out={self.global_config.dump_root_path} '
                 f'{auth_append}'
             )
 
@@ -365,7 +326,7 @@ class MyDump(MyMongo):
             self.exe_command(export_cmd, timeout=None)
 
             # 验证数据库目录是否存在且包含文件
-            db_dir = os.path.join(dump_root_path, database)
+            db_dir = os.path.join(self.global_config.dump_root_path, database)
             if not os.path.exists(db_dir):
                 raise Exception(f"数据库导出失败: 目录不存在 {db_dir}")
 
@@ -393,38 +354,35 @@ class MyDump(MyMongo):
         """计算最优分片数量（使用精确计数）"""
         try:
             if doc_count is None:
-                if not self._connect():
-                    return 1
-
                 db = self.client[database]
                 collection = db[collection_name]
                 doc_count = collection.count_documents({})
 
             # 根据文档数量计算分片数
-            if doc_count < self.shard_config.min_documents_for_shard:
+            if doc_count < self.global_config.min_documents_for_shard:
                 return 1
 
             # 计算需要的分片数（每100万文档一个分片）
             needed_shards = max(1, min(
-                math.ceil(doc_count / self.shard_config.min_documents_for_shard),
-                self.shard_config.max_shard_count
+                math.ceil(doc_count / self.global_config.min_documents_for_shard),
+                self.global_config.max_shard_count
             ))
 
             print(
-                f"📊 分片计算: {doc_count:,} 条记录 -> {needed_shards} 个分片 (最大: {self.shard_config.max_shard_count})")
+                f"📊 分片计算: {doc_count:,} 条记录 -> {needed_shards} 个分片 (最大: {self.global_config.max_shard_count})")
 
             return needed_shards
 
         except Exception as e:
             print(f"⚠️ 计算分片数量失败: {e}")
-            return self.shard_config.default_shard_count
+            return self.global_config.default_shard_count
 
     def _get_collection_objectid_ranges(self, db_name: str, collection_name: str, shard_count: int,
                                         doc_count: int = None) -> List[
         ObjectIdRange]:
         """获取collection的ObjectId分片范围"""
         try:
-            if not self._connect() or shard_count <= 1:
+            if shard_count <= 1:
                 return []
 
             db = self.client[db_name]

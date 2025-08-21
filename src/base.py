@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 from pymongo import IndexModel
@@ -12,7 +13,7 @@ from pymongo import MongoClient
 from pymongo.errors import OperationFailure, DuplicateKeyError
 
 
-class Mongo:
+class MongoConfig:
     __slots__ = ['host', 'port', 'username', 'password']
 
     def __init__(self, db_host, db_port, db_user, db_pass):
@@ -22,10 +23,17 @@ class Mongo:
         self.password = db_pass
 
 
-class ShardConfig:
+class GlobalConfig:
     """分片配置类"""
 
     def __init__(self):
+        self.databases = []
+        self.maxThreads = 4
+        self.numParallelCollections = 16
+        self.numInsertionWorkersPerCollection = 16
+        self.skip_export = False
+        self.dump_root_path:Path = None
+        self.enable_sharding = True  # 是否启用分片
         self.min_documents_for_shard = 1000000  # 分片最小文档数
         self.default_shard_count = 4  # 默认分片数
         self.max_shard_count = 16  # 最大分片数
@@ -59,18 +67,19 @@ class ObjectIdRange:
 
 class MyMongo(object):
 
-    def __init__(self, mongo: Mongo):
-        self.mongo = mongo
+    def __init__(self, mongo_config: MongoConfig, global_config: GlobalConfig):
+        self.mongo_config = mongo_config
+        self.global_config = global_config
         self._init_client()
         self._init_mongo_exe()
 
     def _init_client(self):
         """初始化MongoDB客户端"""
         try:
-            if self.mongo.username and self.mongo.password:
-                uri = f"mongodb://{self.mongo.username}:{self.mongo.password}@{self.mongo.host}:{self.mongo.port}/admin"
+            if self.mongo_config.username and self.mongo_config.password:
+                uri = f"mongodb://{self.mongo_config.username}:{self.mongo_config.password}@{self.mongo_config.host}:{self.mongo_config.port}/admin"
             else:
-                uri = f"mongodb://{self.mongo.host}:{self.mongo.port}/"
+                uri = f"mongodb://{self.mongo_config.host}:{self.mongo_config.port}/"
 
             self.client = MongoClient(uri)
             return True
@@ -251,9 +260,6 @@ class MyMongo(object):
     def get_collection_counts_fast(self, database: str) -> dict:
         """使用快速统计信息获取集合文档数量"""
         try:
-            if not self._connect():
-                return {}
-
             db = self.client[database]
             collection_stats = {}
 

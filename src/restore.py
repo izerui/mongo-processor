@@ -1,13 +1,8 @@
 import os
-import platform
-import re
-import concurrent.futures
-from subprocess import Popen, PIPE, STDOUT
-from typing import List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pymongo import MongoClient
 
-from base import MyMongo, Mongo
+from base import MyMongo, MongoConfig
+from src.base import GlobalConfig
 
 
 class MyRestore(MyMongo):
@@ -15,28 +10,15 @@ class MyRestore(MyMongo):
     按数据库整体导入
     """
 
-    def __init__(self, mongo: Mongo, num_parallel_collections: int = 4, num_insertion_workers: int = 4, command_timeout: int = 600):
-        super().__init__(mongo)
-        self.num_parallel_collections = num_parallel_collections
-        self.num_insertion_workers = num_insertion_workers
-        self.command_timeout = command_timeout  # 命令超时时间（秒）
+    def __init__(self, mongo: MongoConfig, global_config: GlobalConfig):
+        super().__init__(mongo, global_config)
 
-    def restore_db(self, database: str, dump_root_path: str) -> None:
+    def restore_db(self, database: str) -> None:
         """
         高性能直接导入：自动识别分片集合并直接导入到原始集合
         :param database: 目标数据库名
-        :param dump_root_path: 导出根路径
         """
-        """
-                高性能直接导入：自动识别分片集合并直接导入到原始集合
-                :param database: 目标数据库名
-                :param dump_root_path: 导出根路径
-                """
-        if not dump_root_path:
-            print(f"⚠️ 没有提供数据库目录路径")
-            return
-
-        db_dir = os.path.join(dump_root_path, database)
+        db_dir = os.path.join(self.global_config.dump_root_path, database)
         if not os.path.exists(db_dir):
             print(f"⚠️ 数据库目录不存在: {db_dir}")
             return
@@ -90,7 +72,7 @@ class MyRestore(MyMongo):
             print(f"📊 分片集合: {list(sharded_collections.keys())}")
             print(f"📊 普通集合: {normal_collections}")
 
-            with ThreadPoolExecutor(max_workers=self.num_parallel_collections) as executor:
+            with ThreadPoolExecutor(max_workers=self.global_config.numParallelCollections) as executor:
                 future_to_task = {}
 
                 for task_type, target_collection, file_path in import_tasks:
@@ -134,8 +116,8 @@ class MyRestore(MyMongo):
             print(f'❌ 导入数据库 {database} 失败: {e}')
             raise
 
-
-    def _import_single_file(self, database: str, target_collection: str, file_path: str, is_sharded: bool = False) -> str:
+    def _import_single_file(self, database: str, target_collection: str, file_path: str,
+                            is_sharded: bool = False) -> str:
         """
         导入单个文件到指定集合
         :param database: 数据库名
@@ -146,13 +128,13 @@ class MyRestore(MyMongo):
         """
         try:
             # 构建认证参数
-            user_append = f'--username="{self.mongo.username}"' if self.mongo.username else ''
-            password_append = f'--password="{self.mongo.password}"' if self.mongo.password else ''
-            auth_append = f'--authenticationDatabase=admin' if self.mongo.username else ''
+            user_append = f'--username="{self.mongo_config.username}"' if self.mongo_config.username else ''
+            password_append = f'--password="{self.mongo_config.password}"' if self.mongo_config.password else ''
+            auth_append = f'--authenticationDatabase=admin' if self.mongo_config.username else ''
 
             import_cmd = (
                 f'{self.mongorestore_exe} '
-                f'--host {self.mongo.host}:{self.mongo.port} '
+                f'--host {self.mongo_config.host}:{self.mongo_config.port} '
                 f'{user_append} {password_append} {auth_append} '
                 f'--numParallelCollections=1 '
                 f'--numInsertionWorkersPerCollection={self.num_insertion_workers} '
