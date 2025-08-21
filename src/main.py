@@ -274,14 +274,7 @@ def main():
         except Exception as e:
             print(f"⚠️  索引创建过程中发生错误: {e}")
 
-    print("💤 程序执行完成，进入休眠状态...")
-
-    try:
-        while True:
-            time.sleep(3600)  # 每小时检查一次
-    except KeyboardInterrupt:
-        print("收到退出信号，程序结束")
-        sys.exit(0)
+    print("✅ 数据导出导入程序执行完成")
 
 
 if __name__ == "__main__":
