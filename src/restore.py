@@ -65,7 +65,7 @@ class MyRestore(MyMongo):
                 print("⚠️ 没有找到需要导入的文件")
                 return
 
-            print(f"🚀 准备并发导入 {len(import_tasks)} 个任务，使用 {self.num_parallel_collections} 个线程")
+            print(f"🚀 准备并发导入 {len(import_tasks)} 个任务，使用 {self.global_config.numParallelCollections} 个线程")
 
             # 使用线程池并发导入
             print(f"📁 数据库目录: {db_dir}")
@@ -137,7 +137,7 @@ class MyRestore(MyMongo):
                 f'--host {self.mongo_config.host}:{self.mongo_config.port} '
                 f'{user_append} {password_append} {auth_append} '
                 f'--numParallelCollections=1 '
-                f'--numInsertionWorkersPerCollection={self.num_insertion_workers} '
+                f'--numInsertionWorkersPerCollection={self.global_config.numInsertionWorkersPerCollection} '
                 f'--noIndexRestore '
                 f'{"--drop " if not is_sharded else ""}'
                 f'--db {database} '

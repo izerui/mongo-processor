@@ -243,7 +243,8 @@ class MyMongo(object):
             self.mongodump_exe = os.path.join(base_dir, 'mongodb-database-tools', 'macos-arm64-100.13.0', 'mongodump')
             self.mongorestore_exe = os.path.join(base_dir, 'mongodb-database-tools', 'macos-arm64-100.13.0',
                                                  'mongorestore')
-        raise BaseException(f"❌ 不支持的操作系统,无法初始化MongoDB执行命令")
+        else:
+            raise BaseException(f"❌ 不支持的操作系统,无法初始化MongoDB执行命令")
 
     def get_database_collections(self, database: str) -> List[str]:
         """获取数据库中的所有collection名称"""
