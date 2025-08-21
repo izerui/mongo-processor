@@ -161,11 +161,8 @@ class MyMongo(object):
                 target_collection = target_db[collection_name]
 
                 if not indexes:
-                    print(f"   📄 集合 {collection_name}: 无索引需要创建")
                     results[collection_name] = True
                     continue
-
-                print(f"   📄 集合 {collection_name}: 准备创建 {len(indexes)} 个索引")
 
                 # 准备索引模型
                 index_models = []

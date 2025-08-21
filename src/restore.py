@@ -51,9 +51,10 @@ class MyRestore(MyMongo):
                 for i, shard_file in enumerate(shard_files):
                     import_tasks.append(('sharded', original_name, shard_file))
 
-            # 先删除原始集合（仅针对分片集合）
+            # 先重建原始集合（仅针对分片集合）
             for original_name in sharded_collections:
                 self.client[database][original_name].drop()
+                self.client[database].create_collection(original_name)
 
             # 普通任务：每个普通集合单独导入
             for collection_name in normal_collections:
@@ -108,9 +109,6 @@ class MyRestore(MyMongo):
                 if errors:
                     raise Exception(f"导入过程中出现 {len(errors)} 个错误:\n" + "\n".join(errors))
 
-                print(f'✅ 数据库 {database} 并发导入完成')
-
-            print(f'✅ 数据库 {database} 并发导入完成')
 
         except Exception as e:
             print(f'❌ 导入数据库 {database} 失败: {e}')

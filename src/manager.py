@@ -109,10 +109,8 @@ class Manager:
                         db_name, success, duration, export_time, import_time = future.result()
                         if success:
                             successful_dbs.append((db_name, duration, export_time, import_time))
-                            print(f' 🎉 数据库 {db_name} 处理完成 (耗时: {duration:.2f}秒)')
                         else:
                             failed_dbs.append((db_name, duration, export_time, import_time))
-                            print(f' 💥 数据库 {db_name} 处理失败 (耗时: {duration:.2f}秒)')
 
                     except KeyboardInterrupt:
                         print(f" ⚠️  用户中断处理数据库: {db_name}")
@@ -156,8 +154,6 @@ class Manager:
             print(f"   并行效率: {total_time / (total_export_time + total_import_time):.2f}x")
         else:
             print(f"   并行效率: N/A")
-
-        print(f' 🎯 所有数据库操作完成，总耗时: {total_time:.2f}秒')
 
         # 如果有失败的数据库，打印错误信息
         if failed_dbs:
