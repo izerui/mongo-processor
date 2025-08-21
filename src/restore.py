@@ -105,7 +105,7 @@ class MyRestore(Shell):
                         try:
                             result = future.result()
                             completed += 1
-                            print(f"✅ [{completed}/{len(import_tasks)}] {result}")
+                            print(f"✅ 集合导入成功: [{completed}/{len(import_tasks)}] {result}")
                         except Exception as e:
                             print(f"❌ 导入失败 {file_path}: {e}")
                             # 如果是认证失败，给出提示
