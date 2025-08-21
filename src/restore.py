@@ -1,6 +1,7 @@
 import os
 import platform
 import re
+import concurrent.futures
 from subprocess import Popen, PIPE, STDOUT
 from typing import List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -99,6 +100,7 @@ class MyRestore(Shell):
 
                 # 收集结果
                 completed = 0
+                errors = []
                 try:
                     for future in as_completed(future_to_task, timeout=1800):  # 30分钟超时
                         task_type, target_collection, file_path = future_to_task[future]
@@ -117,7 +119,44 @@ class MyRestore(Shell):
                                 print("📁 请检查文件路径和权限")
                             elif "timeout" in str(e).lower():
                                 print("⏰ 命令执行超时，可尝试增加超时时间")
-                            raise
+                            errors.append(f"{file_path}: {e}")
+
+                    # 如果有错误，汇总后抛出
+                    if errors:
+                        raise Exception(f"导入过程中出现 {len(errors)} 个错误:\n" + "\n".join(errors))
+
+                except concurrent.futures.TimeoutError:
+                    raise Exception("导入操作超时，请检查网络连接和MongoDB状态")
+                except TimeoutError:
+                    print("⏰ 导入任务超时，正在取消所有任务...")
+                    if errors:
+                        raise Exception(f"导入过程中出现 {len(errors)} 个错误:\n" + "\n".join(errors))
+                    else:
+                        raise Exception("导入任务超时")
+                except Exception as e:
+                    if "errors" in str(e):
+                        raise  # 重新抛出汇总错误
+                    else:
+                        raise Exception(f"导入操作异常: {e}")
+                except Exception as e:
+                    if "errors" in str(e):
+                        raise  # 重新抛出汇总错误
+                    else:
+                        raise Exception(f"导入操作异常: {e}")
+
+                except TimeoutError:
+                    print("⏰ 导入任务超时，正在取消所有任务...")
+                    # 如果有错误，汇总后抛出
+                    if errors:
+                        raise Exception(f"导入过程中出现 {len(errors)} 个错误:\n" + "\n".join(errors))
+
+                except concurrent.futures.TimeoutError:
+                    raise Exception("导入操作超时，请检查网络连接和MongoDB状态")
+                except Exception as e:
+                    if "errors" in str(e):
+                        raise  # 重新抛出汇总错误
+                    else:
+                        raise Exception(f"导入失败: {e}")
 
                 except TimeoutError:
                     print("⏰ 导入任务超时，正在取消所有任务...")
