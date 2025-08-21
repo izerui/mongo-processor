@@ -93,9 +93,8 @@ class MyRestore(Shell):
 
                 for task_type, target_collection, file_path, is_first in import_tasks:
                     # 对于普通集合，总是使用drop；对于分片，只有第一个文件使用drop
-                    should_drop = is_first and (task_type == 'sharded' or task_type == 'normal')
                     future = executor.submit(self._import_single_file, database, target_collection, file_path,
-                                             should_drop)
+                                             is_first)
                     future_to_task[future] = (task_type, target_collection, file_path)
 
                 # 收集结果
