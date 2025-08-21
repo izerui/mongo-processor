@@ -11,11 +11,11 @@ from typing import Optional, Dict, Any
 
 class Shell(object):
 
-    def _exe_command(self, command, timeout=300, debug=False, show_timestamp=True):
+    def _exe_command(self, command, timeout=None, debug=True, show_timestamp=True):
         """
         执行命令并实时输出日志，支持时间戳和进度显示
         :param command: shell 命令
-        :param timeout: 超时时间（秒）
+        :param timeout: 超时时间（秒），None表示无超时限制
         :param debug: 是否显示调试信息
         :param show_timestamp: 是否在每行输出前添加时间戳
         :return: result, exitcode
@@ -45,8 +45,9 @@ class Shell(object):
             )
 
             # 设置超时定时器
-            timer = threading.Timer(timeout, kill_process, [process])
-            if timeout > 0:
+            timer = None
+            if timeout is not None and timeout > 0:
+                timer = threading.Timer(timeout, kill_process, [process])
                 timer.start()
 
             output_lines = []
@@ -73,14 +74,14 @@ class Shell(object):
 
             finally:
                 # 取消定时器
-                if timeout > 0:
+                if timer is not None:
                     timer.cancel()
 
             elapsed = time.time() - start_time
             end_datetime = datetime.now()
 
             # 检查是否超时
-            if process.returncode is None or process.returncode < 0:
+            if timeout is not None and (process.returncode is None or process.returncode < 0):
                 print(f"⏰ [{end_datetime.strftime('%H:%M:%S')}] 命令执行超时({timeout}秒)，实际耗时: {elapsed:.2f}秒")
                 raise BaseException(f"命令执行超时({timeout}秒)")
 

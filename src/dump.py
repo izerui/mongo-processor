@@ -146,7 +146,7 @@ class MyDump(Shell):
             )
 
             print(f"📦 导出非大集合: 排除 {len(exclude_collections)} 个集合")
-            self._exe_command(export_cmd)
+            self._exe_command(export_cmd, timeout=None)
 
         except Exception as e:
             print(f'❌ 导出非大集合失败: {e}')
@@ -250,7 +250,7 @@ class MyDump(Shell):
                     export_cmd += f' --query=\'{query_str}\''
 
             # 执行分片导出
-            self._exe_command(export_cmd)
+            self._exe_command(export_cmd, timeout=None)
 
             # 验证分片目录中的导出结果
             collection_bson = os.path.join(part_dir, db_name, f"{collection_name}.bson")
@@ -331,7 +331,7 @@ class MyDump(Shell):
             )
 
             # 执行导出
-            self._exe_command(export_cmd)
+            self._exe_command(export_cmd, timeout=None)
 
             # 验证文件是否存在且不为空
             output_bson = os.path.join(dump_root_path, db_name, f"{collection_name}.bson")
@@ -464,7 +464,7 @@ class MyDump(Shell):
             )
 
             # 执行导出
-            self._exe_command(export_cmd)
+            self._exe_command(export_cmd, timeout=None)
 
             # 验证数据库目录是否存在且包含文件
             db_dir = os.path.join(dump_root_path, database)

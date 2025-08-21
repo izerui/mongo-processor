@@ -102,7 +102,7 @@ class MyRestore(Shell):
                 completed = 0
                 errors = []
                 try:
-                    for future in as_completed(future_to_task, timeout=1800):  # 30分钟超时
+                    for future in as_completed(future_to_task, timeout=None):  # 无超时限制
                         task_type, target_collection, file_path = future_to_task[future]
                         try:
                             result = future.result()
@@ -207,7 +207,7 @@ class MyRestore(Shell):
                 f'"{file_path}"'
             )
 
-            self._exe_command(import_cmd, timeout=self.command_timeout)
+            self._exe_command(import_cmd, timeout=None)
             file_name = os.path.basename(file_path)
             return f"{file_name} -> {target_collection}"
 
