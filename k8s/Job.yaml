@@ -4,6 +4,7 @@ metadata:
   name: mongo-processor
   namespace: platform-yunji
 spec:
+  backoffLimit: 0
   template:
     spec:
       restartPolicy: Never
