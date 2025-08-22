@@ -93,15 +93,28 @@ ignoreCollections=testdb.temp_collection,crm.debug_logs,analytics.cache_data
 ### 功能特点
 
 - **导出时过滤**：在导出阶段就跳过被忽略的集合
+- **导入时过滤**：即使手动操作导出文件，导入阶段也会跳过被忽略的集合
 - **索引跳过**：被忽略的集合不会创建索引
+- **分片兼容**：支持普通集合和分片集合的忽略
 - **格式灵活**：支持精确匹配，格式为 `数据库名.集合名`
 - **多集合支持**：可配置多个集合，用逗号分隔
 
 ### 示例输出
 
 ```
-🚫 数据库 testdb 忽略 2 个集合: ['temp_collection', 'cache_table']
-📊 数据库 testdb 包含 8 个需要导出的collection
+🚫 忽略集合: 3个
+    - testdb.temp_collection
+    - crm.debug_logs
+    - analytics.cache_data
+📊 待处理数据库: 3个
+
+🚀 开始导出数据库: testdb
+🚫 数据库 testdb 忽略 1 个集合: ['temp_collection']
+📊 数据库 testdb 包含 5 个需要导出的collection
+
+🚀 开始导入数据库: testdb
+🚫 跳过导入（被忽略）: testdb.temp_collection
+🚫 跳过分片导入（被忽略）: testdb.large_data
 ```
 
 ## 分片功能
