@@ -66,6 +66,42 @@ maxShardCount = 16
 # 跳过导出，直接导入已有数据（默认false）
 skipExport = false
 
+# 忽略指定集合的配置（支持多个，格式：db.collection）
+# 示例：ignoreCollections=testdb.large_collection,testdb.temp_data,otherdb.cache
+ignoreCollections=
+
+
+## 忽略集合配置
+
+支持在导出和导入过程中忽略指定的集合，格式为 `数据库名.集合名`。
+
+### 配置示例
+
+```ini
+[global]
+# 忽略多个集合（用逗号分隔）
+ignoreCollections=testdb.temp_collection,crm.log_data,otherdb.cache_table
+```
+
+### 使用场景
+
+- **临时数据**：跳过临时表或缓存表
+- **大表优化**：跳过不需要迁移的大型历史数据表
+- **调试测试**：只迁移部分关键集合进行测试
+
+### 功能特点
+
+- **导出时过滤**：在导出阶段就跳过被忽略的集合
+- **索引跳过**：被忽略的集合不会创建索引
+- **格式灵活**：支持精确匹配，格式为 `数据库名.集合名`
+- **多集合支持**：可配置多个集合，用逗号分隔
+
+### 示例输出
+
+```
+🚫 数据库 testdb 忽略 2 个集合: ['temp_collection', 'cache_table']
+📊 数据库 testdb 包含 8 个需要导出的collection
+```
 
 ## 分片功能
 

@@ -37,6 +37,7 @@ class GlobalConfig:
         self.min_documents_for_shard = 1000000  # 分片最小文档数
         self.default_shard_count = 4  # 默认分片数
         self.max_shard_count = 16  # 最大分片数
+        self.ignore_collections = []  # 忽略的集合列表，格式为 ["db.collection", ...]
 
 
 class ObjectIdRange:
@@ -156,6 +157,13 @@ class MyMongo(object):
         print(f"\n📂 数据库 {database_name} 开始创建索引...")
 
         for collection_name, indexes in indexes_info.items():
+            # 检查是否是被忽略的集合
+            full_name = f"{database_name}.{collection_name}"
+            if full_name in self.global_config.ignore_collections:
+                print(f"🚫 跳过创建索引（被忽略）: {full_name}")
+                results[collection_name] = True
+                continue
+
             try:
                 target_db = self.client[database_name]
                 target_collection = target_db[collection_name]

@@ -22,6 +22,10 @@ defaultShardCount = 4
 # 最大分片数量（默认16）
 maxShardCount = 24
 
+# 忽略指定集合的配置（支持多个，格式：db.collection）
+# 示例：ignoreCollections=testdb.large_collection,testdb.temp_data,otherdb.cache
+ignoreCollections=
+
 [source]
 host=source-mongodb-host
 port=27017

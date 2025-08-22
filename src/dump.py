@@ -53,7 +53,26 @@ class MyDump(MyMongo):
                 print(f"⚠️ 数据库 {database} 中没有collection")
                 return os.path.join(self.global_config.dump_root_path, database)
 
-            print(f"📊 数据库 {database} 包含 {len(collections)} 个collection")
+            # 过滤忽略的集合
+            filtered_collections = []
+            ignored_collections = []
+            for collection_name in collections:
+                full_name = f"{database}.{collection_name}"
+                if full_name in self.global_config.ignore_collections:
+                    ignored_collections.append(collection_name)
+                else:
+                    filtered_collections.append(collection_name)
+
+            collections = filtered_collections
+
+            if ignored_collections:
+                print(f"🚫 数据库 {database} 忽略 {len(ignored_collections)} 个集合: {ignored_collections}")
+
+            if not collections:
+                print(f"⚠️ 数据库 {database} 中没有需要导出的collection")
+                return os.path.join(self.global_config.dump_root_path, database)
+
+            print(f"📊 数据库 {database} 包含 {len(collections)} 个需要导出的collection")
 
             # 使用快速统计信息分析哪些collection需要分片
             large_collections = []
@@ -308,17 +327,32 @@ class MyDump(MyMongo):
         try:
             print(f"📦 开始常规导出数据库: {database}")
 
+            # 获取需要忽略的集合
+            ignore_collections_for_db = []
+            for ignore_pattern in self.global_config.ignore_collections:
+                if ignore_pattern.startswith(f"{database}."):
+                    collection_name = ignore_pattern[len(database)+1:]
+                    ignore_collections_for_db.append(collection_name)
+
+            if ignore_collections_for_db:
+                print(f"🚫 忽略集合: {ignore_collections_for_db}")
+
             # 构建认证参数
             auth_append = ''
             if self.mongo_config.username and self.mongo_config.password:
                 auth_append = f'--username={self.mongo_config.username} --password="{self.mongo_config.password}" --authenticationDatabase=admin'
 
             # 构建导出命令 - 直接导出到dumps/{database}/
+            exclude_params = ''
+            if ignore_collections_for_db:
+                exclude_params = ' '.join([f'--excludeCollection={col}' for col in ignore_collections_for_db])
+
             export_cmd = (
                 f'{self.mongodump_exe} '
                 f'--host="{self.mongo_config.host}:{self.mongo_config.port}" '
                 f'--db={database} '
                 f'--out={self.global_config.dump_root_path} '
+                f'{exclude_params} '
                 f'{auth_append}'
             )
 
