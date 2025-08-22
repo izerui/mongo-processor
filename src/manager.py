@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-索引处理模块
-用于从source MongoDB读取索引信息，并在target MongoDB后台创建索引
+处理模块
 """
 import concurrent.futures
 import logging
@@ -18,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 class Manager:
-    """索引管理器，负责读取和创建索引"""
 
     def __init__(self, source_config: MongoConfig, target_config: MongoConfig, global_config: GlobalConfig):
         """
