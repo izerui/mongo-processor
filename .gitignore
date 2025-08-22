@@ -10,3 +10,4 @@ config.ini
 .venv
 databases/
 k8s/aws.yaml
+mongosh-2.5.6-darwin-arm64/
