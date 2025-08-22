@@ -32,12 +32,26 @@ class MyRestore(MyMongo):
             normal_collections = []
             import_tasks = []
 
+            # 过滤忽略的集合
             for file in all_files:
                 if file.endswith('.bson'):
                     collection_name = file.replace('.bson', '')
+
+                    # 检查是否是被忽略的集合
+                    full_name = f"{database}.{collection_name}"
+                    if full_name in self.global_config.ignore_collections:
+                        print(f"🚫 跳过导入（被忽略）: {full_name}")
+                        continue
+
                     if '_part' in collection_name:
                         # 分片集合
                         original_name = collection_name.split('_part')[0]
+                        # 检查分片集合的原始名称是否被忽略
+                        original_full_name = f"{database}.{original_name}"
+                        if original_full_name in self.global_config.ignore_collections:
+                            print(f"🚫 跳过分片导入（被忽略）: {original_full_name}")
+                            continue
+
                         if original_name not in sharded_collections:
                             sharded_collections[original_name] = []
                         sharded_collections[original_name].append(os.path.join(db_dir, file))
@@ -63,7 +77,7 @@ class MyRestore(MyMongo):
                     import_tasks.append(('normal', collection_name, bson_file))
 
             if not import_tasks:
-                print("⚠️ 没有找到需要导入的文件")
+                print("⚠️ 没有找到需要导入的文件（可能全部被忽略或目录为空）")
                 return
 
             print(f"🚀 准备并发导入 {len(import_tasks)} 个任务，使用 {self.global_config.numParallelCollections} 个线程")

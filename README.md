@@ -80,7 +80,7 @@ ignoreCollections=
 ```ini
 [global]
 # 忽略多个集合（用逗号分隔）
-ignoreCollections=testdb.temp_collection,crm.log_data,otherdb.cache_table
+ignoreCollections=testdb.temp_collection,crm.debug_logs,analytics.cache_data
 ```
 
 ### 使用场景
@@ -88,6 +88,7 @@ ignoreCollections=testdb.temp_collection,crm.log_data,otherdb.cache_table
 - **临时数据**：跳过临时表或缓存表
 - **大表优化**：跳过不需要迁移的大型历史数据表
 - **调试测试**：只迁移部分关键集合进行测试
+- **导入兼容**：即使手动操作导出文件，导入阶段也会跳过被忽略的集合
 
 ### 功能特点
 
