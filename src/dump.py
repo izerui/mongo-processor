@@ -132,10 +132,11 @@ class MyDump(MyMongo):
             auth_append = ''
             if self.mongo_config.username and self.mongo_config.password:
                 auth_append = f'--username={self.mongo_config.username} --password="{self.mongo_config.password}" --authenticationDatabase=admin'
-                # 构建exclude参数
-                exclude_params = ''
-                if exclude_collections and len(exclude_collections) > 0:
-                    exclude_params = ' '.join([f'--excludeCollection={col}' for col in exclude_collections])
+
+            # 构建exclude参数
+            exclude_params = ''
+            if exclude_collections and len(exclude_collections) > 0:
+                exclude_params = ' '.join([f'--excludeCollection={col}' for col in exclude_collections])
 
             # 构建导出命令 - 导出整个数据库但排除大集合
             export_cmd = (
