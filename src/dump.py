@@ -341,7 +341,7 @@ class MyDump(MyMongo):
             auth_append = ''
             if self.mongo_config.username and self.mongo_config.password:
                 auth_append = f'--username={self.mongo_config.username} --password="{self.mongo_config.password}" --authenticationDatabase=admin'
-
+            pass
             # 构建导出命令 - 直接导出到dumps/{database}/
             exclude_params = ''
             if ignore_collections_for_db:
