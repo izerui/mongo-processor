@@ -196,6 +196,8 @@ class DataComparator:
             # 计算差异
             if 'count' in result['source_stats'] and 'count' in result['target_stats']:
                 result['count_diff'] = result['source_stats']['count'] - result['target_stats']['count']
+                result['source_count'] = result['source_stats']['count']
+                result['target_count'] = result['target_stats']['count']
 
             if 'size' in result['source_stats'] and 'size' in result['target_stats']:
                 result['size_diff'] = result['source_stats']['size'] - result['target_stats']['size']
@@ -218,6 +220,10 @@ class DataComparator:
                 result['issues'].append(f"缺少索引: {', '.join(missing_indexes)}")
             if extra_indexes:
                 result['issues'].append(f"多余索引: {', '.join(extra_indexes)}")
+
+            # 添加数量差异信息
+            if result['count_diff'] != 0:
+                result['issues'].append(f"文档数量不一致: 源({result['source_count']}) vs 目标({result['target_count']})")
 
             # 数据哈希对比
             if detailed:
